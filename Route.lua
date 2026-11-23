@@ -16,6 +16,7 @@ local ITERATIONS, DEPART2, PROFONDEUR = 40, 21, 3
 -- Le temps compte aussi : un point à moins de 20 % de chance n'est pas compté pour une recette, sauf si aucune autre ne
 -- le couvre (mieux la moins mauvaise qu'un trou).
 local SEUIL = 0.2
+local COURT = 5 -- une étape de COURT points ou moins entre deux étapes de la même recette : un aller-retour (Maitrise#17)
 
 -- Les recettes d'un métier que la route peut prendre : une source connue (d'emblée, maître, patron vendu ; « inconnue »
 -- couvre aussi les patrons sous réputation, de l'autre faction ou vendus en donjon, règle du générateur de la réserve),
@@ -141,29 +142,64 @@ function ns.route(rs, achat, revente, FROM, TO)
   for iter = 1, ITERATIONS do
     if iter == DEPART2 then need, P = allUses, {} end -- 2e départ : tout ce qu'une recette peut consommer sera réemployé
     marg, memo = {}, {}
+    -- Coût net espéré d'un point à la compétence s avec la recette r (nil si elle ne donne rien ou qu'un composant n'a pas
+    -- de prix) : (composants − valeur du produit) / chance, plus la part du prix pour l'apprendre.
+    local function coutPoint(r, s)
+      local p = chance(r, s)
+      if p <= 0 then return nil end
+      local c = 0
+      for _, rq in ipairs(r.reag) do
+        local u = unit(rq.id, s, 0)
+        if not u then sansPrix[rq.id] = true return nil end
+        c = c + u * rq.qty
+      end
+      local v = 0
+      if r.o then v = ((need[r.o] or 0) > 0 and (unit(r.o, s, 1) or 0) or revente(r.o)) * r.n end
+      return (c - v) / p + (apprendre[r] or 0), p
+    end
     local steps = {}
     for s = FROM, TO - 1 do
       local best, bk, repli, rk -- repli : le meilleur parmi les recettes sous SEUIL, si aucune autre ne couvre le point
       for _, r in ipairs(rs) do
-        local p = chance(r, s)
-        if p > 0 then
-          local c = 0
-          for _, rq in ipairs(r.reag) do
-            local u = unit(rq.id, s, 0)
-            if not u then c = nil; sansPrix[rq.id] = true break end
-            c = c + u * rq.qty
-          end
-          if c then
-            local v = 0
-            if r.o then v = ((need[r.o] or 0) > 0 and (unit(r.o, s, 1) or 0) or revente(r.o)) * r.n end
-            local k = (c - v) / p + (apprendre[r] or 0)
-            if p < SEUIL then
-              if not rk or k < rk then repli, rk = { r = r, crafts = 1 / p }, k end
-            elseif not bk or k < bk then best, bk = { r = r, crafts = 1 / p }, k end
-          end
+        local k, p = coutPoint(r, s)
+        if k then
+          if p < SEUIL then
+            if not rk or k < rk then repli, rk = { r = r, crafts = 1 / p, k = k }, k end
+          elseif not bk or k < bk then best, bk = { r = r, crafts = 1 / p, k = k }, k end
         end
       end
       steps[s] = best or repli
+    end
+    -- Pas d'aller-retour court (Maitrise#17) : une suite de COURT points ou moins sur une recette B, entre deux suites de la
+    -- même recette A, passe à A si A y donne encore ses points (chance d'au moins 20 %) et que l'économie de B est
+    -- minime (moins de 20 pa, ou moins de 3 % du coût des points de la tranche). Moins de composants différents à
+    -- acheter, une frise plus lisible ; le total reste chiffré exactement plus bas.
+    local total = 0
+    for s = FROM, TO - 1 do if steps[s] then total = total + math.max(0, steps[s].k) end end
+    local change = true
+    while change do
+      change = false
+      local s = FROM
+      while s < TO do
+        local b = steps[s]
+        local e = s
+        while e + 1 < TO and steps[e + 1] and b and steps[e + 1].r == b.r do e = e + 1 end
+        local avant, apres = steps[s - 1], steps[e + 1]
+        if b and avant and apres and avant.r == apres.r and avant.r ~= b.r and e - s + 1 <= COURT then
+          local surcout, remplace = 0, {}
+          for t = s, e do
+            local k, p = coutPoint(avant.r, t)
+            if not k or p < SEUIL then surcout = nil break end
+            surcout = surcout + k - steps[t].k
+            remplace[t] = { r = avant.r, crafts = 1 / p, k = k }
+          end
+          if surcout and (surcout < 2000 or surcout < 0.03 * total) then
+            for t = s, e do steps[t] = remplace[t] end
+            change = true
+          end
+        end
+        s = e + 1
+      end
     end
     -- Le flux : ce que la route consomme, ce qu'elle produit, puis fabriquer ou acheter le reste.
     local req, made = {}, {}

@@ -152,6 +152,16 @@ assert(res.fabrications[1].nom == "Bouclier" and res.patrons == 0, "le prix du m
 AzerothCommuneDB.trainers = nil
 print("Maîtrise : conditions d'accès et prix du maître OK")
 
+-- Pas d'aller-retour court (Maitrise#17) : « Clou » (de 5 à 7) coupe « Lame » (de 1 à 10). Économie minime (10 pc le point) :
+-- la Lame tout du long ; grosse économie (19 pa le point) : le Clou reste.
+local CLOU = 2776
+local RA = { [1] = { 5001, "Lame", { M, 2 }, 1, 10, 20 }, [4] = { 5004, "Clou", { CLOU, 1 }, 5, 7, 8 } }
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 1000, [CLOU] = 1990 }, recettes = RA })
+assert(#res.fabrications == 1 and res.fabrications[1].nom == "Lame", "économie minime : pas d'aller-retour : " .. noms(res))
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 1000, [CLOU] = 100 }, recettes = RA })
+assert(#res.fabrications == 3 and res.fabrications[2].nom == "Clou", "grosse économie : le Clou reste : " .. noms(res))
+print("Maîtrise : pas d'aller-retour court OK")
+
 -- Plages de couleur et fourchettes (Maitrise#11), seuils du client : orange sous le jaune, vert au milieu jaune/gris.
 -- « Orange » 1-10-20 → 10 orange ; « Longue » (jaune 10, gris 50) : de 10 à 30 jaune, de 30 à 50 vert.
 local function etape(r, nom) for _, f in ipairs(r.fabrications) do if f.nom == nom then return f end end end
