@@ -221,56 +221,48 @@ local function afficher(r)
   ecrireResume()
 end
 
--- Le bouton de la tranche (règle « info cliquable ») : sans tranche, « En faire un projet » ; avec, son état (compétence
--- sur le curseur : la progression, rien d'autre). Relu à l'ouverture et toutes les 5 s tant que la fenêtre est ouverte,
--- par le socle seulement (jamais GetProfessions).
+-- Deux rôles séparés (retour de Virgile sur la PR #14) : Calculer calcule et affiche, sans jamais toucher au projet ; le
+-- bouton du projet enregistre la route affichée dans le projet de Composants (« En faire un projet » sans tranche,
+-- « Mettre à jour le projet » avec), grisé tant qu'aucune route n'est calculée pour ce métier. La progression de la
+-- tranche (compétence sur le curseur) est dans le titre de la fenêtre. Relu à l'ouverture et toutes les 5 s tant que la
+-- fenêtre est ouverte, par le socle seulement (jamais GetProfessions) ; au curseur atteint, la tranche se termine.
 local function majBouton()
   if not (frame and frame:IsShown() and choix) then return end
   local e = ns.trancheEtat(choix)
-  if e then etatB:SetText(e.texte); etatB:Enable()
-  else etatB:SetText("En faire un projet"); etatB:SetEnabled(res ~= nil and res.metier == choix) end
+  frame.title:SetText(e and ("Maîtrise · tranche %s"):format(e.texte) or "Maîtrise")
+  etatB:SetText(e and "Mettre à jour le projet" or "En faire un projet")
+  etatB:SetEnabled(res ~= nil and res.metier == choix)
 end
 
 local function bulleTranche(self)
   GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
   local t = choix and ns.trancheDe(choix)
   if t then
-    GameTooltip:AddLine("Tranche en cours", 1, 0.82, 0)
-    GameTooltip:AddLine(("%s : de %d à %d."):format(choix, t.de, t.a), 0.8, 0.8, 0.8)
-    GameTooltip:AddLine("Clic : recalculer depuis ta compétence jusqu'au même curseur", 0.6, 0.6, 0.6)
-    GameTooltip:AddLine("Clic droit : reprendre plus haut, ou abandonner", 0.6, 0.6, 0.6)
+    GameTooltip:AddLine("Mettre à jour le projet", 1, 0.82, 0)
+    GameTooltip:AddLine(("Le projet tient aujourd'hui %s de %d à %d ; il prend la route affichée."):format(choix, t.de, t.a), 0.8, 0.8, 0.8, true)
+    GameTooltip:AddLine("Clic droit : ouvrir le projet, ou abandonner la tranche", 0.6, 0.6, 0.6)
   else
-    GameTooltip:AddLine("Un projet Composants tenu : les besoins de cette tranche seulement.", 0.8, 0.8, 0.8)
+    GameTooltip:AddLine("En faire un projet", 1, 0.82, 0)
+    GameTooltip:AddLine("Un projet Composants tenu avec la route affichée : les besoins de cette tranche seulement.", 0.8, 0.8, 0.8, true)
   end
   GameTooltip:Show()
 end
 
-local function recalculer(curseur)
-  local r, err = ns.trancheRecalculer(choix, curseur)
-  if not r then print("|cffffd100Maîtrise :|r " .. err) return end
-  curseurE:SetText(tostring(r.a))
-  afficher(r)
-  majBouton()
-end
-
+-- Clic : la route affichée devient la tranche (créée, ou le même projet mis à jour : choix de case gardés) et le projet
+-- s'ouvre dans Composants. Clic droit, avec une tranche : ouvrir le projet, ou abandonner la tranche.
 local function clicTranche(_, bouton)
   if not choix then return end
   local t = ns.trancheDe(choix)
-  if not t then
-    local t, err = ns.trancheCreer(choix, res)
-    if not t then print("|cffffd100Maîtrise :|r " .. err)
-    else Composants.Ouvrir(t.projet) end -- le projet créé s'ouvre dans Composants
-  elseif bouton == "RightButton" then
+  if t and bouton == "RightButton" then
     MenuUtil.CreateContextMenu(etatB, function(_, root)
       root:CreateButton("Ouvrir le projet", function() Composants.Ouvrir(t.projet) end)
-      local c = tonumber(curseurE:GetText())
-      -- Sans curseur saisi (ou le même), pas de « Reprendre » : le clic gauche recalcule déjà jusqu'au même curseur.
-      if c and c ~= t.a then root:CreateButton(("Reprendre jusqu'à %d"):format(c), function() recalculer(c) end) end
       root:CreateButton("Abandonner la tranche", function() ns.trancheAbandonner(choix); majBouton() end)
     end)
-  else
-    recalculer()
+    return
   end
+  local nouvelle, err = ns.trancheCreer(choix, res)
+  if not nouvelle then print("|cffffd100Maîtrise :|r " .. err)
+  else Composants.Ouvrir(nouvelle.projet) end
   majBouton()
 end
 
