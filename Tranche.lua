@@ -49,6 +49,12 @@ end
 -- Crée la tranche du métier d'après la route res (ns.tranche) : un projet « Maîtrise : <métier> » tenu ; celui de la
 -- tranche déjà là est repris. Rend la tranche, ou nil et la raison.
 function ns.trancheCreer(metier, res)
+  if not res then return nil, "calcule d'abord la tranche (Calculer)" end
+  -- Une route calculée avant un gain de compétence (ou avant la fin d'une tranche) ne fait pas de tranche : elle partirait
+  -- du mauvais niveau, ou serait déjà finie.
+  local rang
+  for _, m in ipairs(ns.metiers()) do if m.nom == metier then rang = m.rang end end
+  if res.metier ~= metier or res.de ~= rang then return nil, "ta compétence a changé depuis le calcul : refais Calculer" end
   if #res.fabrications == 0 then return nil, "aucune recette à fabriquer sur cette tranche" end
   local _, p = ns.trancheDe(metier)
   p = p or Composants.NouveauProjet({ name = "Maîtrise : " .. metier })

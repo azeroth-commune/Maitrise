@@ -226,7 +226,8 @@ local function clicTranche(_, bouton)
   elseif bouton == "RightButton" then
     MenuUtil.CreateContextMenu(etatB, function(_, root)
       local c = tonumber(curseurE:GetText())
-      root:CreateButton(c and ("Reprendre jusqu'à %d"):format(c) or "Reprendre (saisis un curseur)", function() recalculer(c) end)
+      -- Sans curseur saisi (ou le même), pas de « Reprendre » : le clic gauche recalcule déjà jusqu'au même curseur.
+      if c and c ~= t.a then root:CreateButton(("Reprendre jusqu'à %d"):format(c), function() recalculer(c) end) end
       root:CreateButton("Abandonner la tranche", function() ns.trancheAbandonner(choix); majBouton() end)
     end)
   else
