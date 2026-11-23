@@ -170,17 +170,17 @@ function ns.route(rs, achat, revente, FROM, TO)
       end
       local v = 0
       if r.o then v = ((need[r.o] or 0) > 0 and (unit(r.o, s, 1) or 0) or revente(r.o)) * r.n end
-      return (c - v) / p + (apprendre[r] or 0), p
+      return (c - v) / p + (apprendre[r] or 0), p, c - v -- le net d'une fabrication : composants − produit
     end
     local steps = {}
     for s = FROM, TO - 1 do
       local best, bk, repli, rk -- repli : le meilleur parmi les recettes sous SEUIL, si aucune autre ne couvre le point
       for _, r in ipairs(rs) do
-        local k, p = coutPoint(r, s)
+        local k, p, net = coutPoint(r, s)
         if k then
           if p < SEUIL then
-            if not rk or k < rk then repli, rk = { r = r, crafts = 1 / p, k = k }, k end
-          elseif not bk or k < bk then best, bk = { r = r, crafts = 1 / p, k = k }, k end
+            if not rk or k < rk then repli, rk = { r = r, crafts = 1 / p, k = k, net = net }, k end
+          elseif not bk or k < bk then best, bk = { r = r, crafts = 1 / p, k = k, net = net }, k end
         end
       end
       steps[s] = best or repli
@@ -203,10 +203,10 @@ function ns.route(rs, achat, revente, FROM, TO)
         if b and avant and apres and avant.r == apres.r and avant.r ~= b.r and e - s + 1 <= COURT then
           local surcout, remplace = 0, {}
           for t = s, e do
-            local k, p = coutPoint(avant.r, t)
+            local k, p, net = coutPoint(avant.r, t)
             if not k or p < SEUIL then surcout = nil break end
             surcout = surcout + k - steps[t].k
-            remplace[t] = { r = avant.r, crafts = 1 / p, k = k }
+            remplace[t] = { r = avant.r, crafts = 1 / p, k = k, net = net }
           end
           if surcout and (surcout < 2000 or surcout < 0.03 * total) then
             for t = s, e do steps[t] = remplace[t] end
@@ -286,6 +286,7 @@ function ns.route(rs, achat, revente, FROM, TO)
         fab[#fab + 1] = last
       end
       last.a, last.fois = s + 1, last.fois + b.crafts
+      last.coutNet = (last.coutNet or 0) + b.net * b.crafts
       last.chances[#last.chances + 1] = 1 / b.crafts
       local c, pl = couleur(b.r, s), last.plages
       if #pl > 0 and pl[#pl].couleur == c then pl[#pl].a = s + 1 else pl[#pl + 1] = { de = s, a = s + 1, couleur = c } end
@@ -301,7 +302,18 @@ function ns.route(rs, achat, revente, FROM, TO)
     f.fourchette = bas and { bas = bas, haut = haut } or nil
     f.incertaine = verts * 2 > f.a - f.de
     f.chances = nil
+    f.net = f.coutNet / f.fois -- le net par fabrication : composants − revente du produit (Maitrise#12)
+    f.coutNet = nil
     f.fois = math.ceil(f.fois - 1e-9)
+  end
+  -- Le coût « une fois sur dix » (Maitrise#12) : le net moyen, plus pour chaque étape non orange son net par fabrication
+  -- (s'il est positif) × les fabrications de plus du 90e centile. Somme des 90e centiles étape par étape : un majorant
+  -- prudent (le vrai 90e centile de la somme est plus bas, les aléas des étapes se compensent un peu) ; sans aléa (étapes
+  -- orange), égal au net moyen. Pas de convolution : même approximation que les fourchettes.
+  local net = bestPlan.achats + bestPlan.patrons - bestPlan.revente
+  local dix = net
+  for _, f in ipairs(fab) do
+    if f.fourchette then dix = dix + math.max(0, f.net) * math.max(0, f.fourchette.haut - f.fois) end
   end
   table.sort(bestPlan.list, function(a, b) return (a.cout or 0) > (b.cout or 0) end)
   local sp = {}
@@ -309,7 +321,7 @@ function ns.route(rs, achat, revente, FROM, TO)
   table.sort(sp)
   return { de = FROM, a = TO, fabrications = fab, achats = bestPlan.list, totalAchats = bestPlan.achats,
     patrons = bestPlan.patrons, total = bestPlan.achats + bestPlan.patrons, revente = bestPlan.revente, trous = trous,
-    sansPrix = sp, incomplet = bestPlan.incomplet }
+    sansPrix = sp, incomplet = bestPlan.incomplet, net = net, netUneSurDix = math.floor(dix + 0.5) }
 end
 
 -- La compétence du personnage (GUID, nil = le connecté) dans ce métier, d'après le relevé du socle ; et ses métiers.
@@ -327,7 +339,10 @@ end
 -- (le 10e et le 90e centile des fabrications : { bas =, haut = }, nil pour une étape orange), incertaine (plus de la moitié
 -- des points en vert) } }, achats = { { id, qty, cout } }, totalAchats, patrons,
 -- total, revente, trous = { { de, a } }, sansPrix = { id… }, incomplet, scan (date lisible du dernier scan de l'HV, nil
--- sans), sansHV (aucun cours de l'HV : marchands seuls) }, ou nil et la raison.
+-- sans), sansHV (aucun cours de l'HV : marchands seuls), net (total − revente), netUneSurDix (le net au 90e centile,
+-- majorant : voir ns.route), apprentissages = { { niveau, cle, nom, source (« Maître », « Patron », « Patron à l'HV »), prix
+-- (nil : inconnu), objetPatron } } (les recettes à apprendre, à leur niveau ; sans les connues) } ; chaque fabrication porte
+-- aussi net (composants − revente du produit, par fabrication, en cuivre) }, ou nil et la raison.
 -- ponytail: le stock n'entre pas dans la route (tout acheté) ; Composants le déduit dans les Besoins du projet de
 -- tranche (Maitrise#3).
 function ns.tranche(guid, metier, curseur)

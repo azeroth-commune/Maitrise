@@ -233,6 +233,18 @@ for k = 0, 1000 do c = c + (d[k] or 0); if not eb and c >= 0.1 then eb = k end; 
 assert(math.abs(bas - eb) <= 1 and math.abs(haut - eh) <= 1, ("fourchette %d-%d, exacte %d-%d"):format(bas, haut, eb, eh))
 print("Maîtrise : plages de couleur et fourchettes OK")
 
+-- Le résumé (Maitrise#12) : le coût « une fois sur dix » dépasse le net moyen dès qu'une étape n'est pas orange (somme des
+-- 90e centiles étape par étape, un majorant) et l'égale quand tout est orange ; le net par fabrication de chaque étape.
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Orange", { M, 1 }, 1, 10, 20 } } })
+assert(res.net == res.total - res.revente and res.netUneSurDix == res.net, "tout orange : une fois sur dix = le net moyen")
+res = scenario({ rang = 5, curseur = 50, marchands = { [M] = 10 }, recettes = LONGUE })
+assert(res.netUneSurDix > res.net, "étape non orange : une fois sur dix au-dessus du net moyen")
+assert(etape(res, "Longue").net == 10, "net par fabrication : un minerai à 10 : " .. etape(res, "Longue").net)
+-- Net par fabrication = composants − revente du produit au marchand (le produit 5002 revendu 4 : 10 − 4).
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, revente = { [5002] = 4 }, recettes = { [1] = { 5002, "Lame", { M, 1 }, 1, 10, 20 } } })
+assert(res.fabrications[1].net == 6, "net 10 − 4 : " .. res.fabrications[1].net)
+print("Maîtrise : résumé (une fois sur dix, net par fabrication) OK")
+
 -- La tranche tenue (Maitrise#3) : créer, une seule par perso et métier, progression, recalculer, finir.
 local function rang(r) AzerothCommuneDB.chars[MOI].professions[1].rank = r end
 res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Lame", { M, 2 }, 1, 10, 20 } } })
