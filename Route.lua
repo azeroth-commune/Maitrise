@@ -166,7 +166,8 @@ function ns.route(rs, achat, revente, FROM, TO)
     if b then
       local last = fab[#fab]
       if last and last.cle == b.r.key and last.a == s then last.a, last.fois = s + 1, last.fois + b.crafts
-      else fab[#fab + 1] = { de = s, a = s + 1, cle = b.r.key, nom = b.r.name, fois = b.crafts, patron = b.r.pattern } end
+      else fab[#fab + 1] = { de = s, a = s + 1, cle = b.r.key, nom = b.r.name, fois = b.crafts, patron = b.r.pattern, objet = b.r.o,
+        n = b.r.n, composants = b.r.reag } end
     else
       local last = trous[#trous]
       if last and last.a == s then last.a = s + 1 else trous[#trous + 1] = { de = s, a = s + 1 } end
@@ -192,7 +193,8 @@ function ns.metiers(guid)
 end
 
 -- La tranche (personnage, métier, curseur) : la route du niveau actuel au curseur, aux prix du moment (socle). Rend
--- { de, a, fabrications = { { de, a, cle, nom, fois, patron } }, achats = { { id, qty, cout } }, totalAchats, patrons,
+-- { de, a, fabrications = { { de, a, cle (le sort de la recette), nom, fois, patron, objet (nil : enchantement), n (produits
+-- par fabrication), composants = { { id, qty } } } }, achats = { { id, qty, cout } }, totalAchats, patrons,
 -- total, revente, trous = { { de, a } }, sansPrix = { id… }, incomplet, scan (date lisible du dernier scan de l'HV, nil
 -- sans), sansHV (aucun cours de l'HV : marchands seuls) }, ou nil et la raison.
 -- ponytail: le stock n'entre pas dans la route (tout acheté) ; Composants le déduit dans les Besoins du projet de

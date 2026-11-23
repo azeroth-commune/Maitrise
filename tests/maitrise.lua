@@ -13,8 +13,8 @@ end
 local function bouton(texte)
     return enfants(MaitriseFrame, function(c) return c:GetObjectType() == "Button" and c.GetText and c:GetText() == texte end)[1]
 end
--- Les lignes affichées d'un tableau du socle (les cadres qui portent .item).
-local function lignes() return enfants(MaitriseFrame, function(c) return c.item ~= nil and c:IsVisible() end) end
+-- Les étapes affichées de la frise (les cadres qui portent .etape).
+local function etapes() return enfants(MaitriseFrame, function(c) return c.etape ~= nil and c:IsVisible() end) end
 
 test("Maîtrise se charge : /maitrise, regroupé avec Azeroth Commune, l'API de tranche", function()
     assertEquals("/maitrise", SLASH_MAITRISE1)
@@ -42,6 +42,11 @@ test("Maîtrise : la route d'une tranche de Forge, 1 → 40, dans la fenêtre", 
     local res = assert(Maitrise.Tranche(nil, "Forge", 40))
     assertTrue(#res.fabrications > 0 and #res.trous == 0, "des fabrications, sans trou")
     assertEquals("22/11 21:00", res.scan)
-    assertEquals(#res.fabrications, #lignes(), "une ligne par fabrication dans l'onglet Route")
+    -- La frise : une étape par fabrication, l'objectif au bout ; chaque fabrication porte l'icône de son objet.
+    local vues = etapes()
+    assertEquals(#res.fabrications + #res.trous + 1, #vues, "les étapes de la frise")
+    local avecIcone = 0
+    for _, r in ipairs(vues) do if r.icone:IsShown() and r.icone.tex:GetTexture() then avecIcone = avecIcone + 1 end end
+    assertEquals(#res.fabrications, avecIcone, "une icône par fabrication")
     MaitriseFrame:Hide()
 end)
