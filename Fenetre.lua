@@ -30,13 +30,17 @@ local COL_ACHATS = {
 -- La frise de la route : les étapes de haut en bas sur l'axe des points de compétence, une par suite de points sur la même
 -- recette, les trous à leur place, l'objectif au bout. Pas proportionnelle aux points : une étape d'un point se lit
 -- aussi bien qu'une de cinquante, le niveau de départ est écrit sur l'axe. L'icône est le vrai objet produit (le sort
--- pour un enchantement) : survol = la bulle du jeu, Maj+clic = le lien dans le chat, Ctrl+clic = la cabine d'essayage
--- (HandleModifiedItemClick, comme dans les recettes).
+-- pour un enchantement) : survol = la bulle du jeu ; les clics d'un objet comme partout dans le jeu
+-- (HandleModifiedItemClick, clics gauche et droit) : Maj+clic = le lien dans le chat, Ctrl+clic = la cabine d'essayage,
+-- Ctrl+clic droit = dans le Brouillon de Composants (qui intercepte ce clic partout).
 -- ponytail: verticale seulement ; une frise horizontale en option si l'envie vient.
 local ETAPE_H, AXE_X, ICONE = 46, 44, 34
+-- Le lien d'un objet : celui du jeu (chargé par la bulle au survol), sinon un lien fait à la main, que Composants lit
+-- aussi bien (il ne regarde que « item:<id> »).
 local function lienObjet(id)
   local o = (lib:Lire("objets") or {})[id]
   return (o and o.link) or select(2, C_Item.GetItemInfo(id))
+    or ("|cffffffff|Hitem:%d::::::::::::::::|h[%s]|h|r"):format(id, nomObjet(id))
 end
 local function lienSort(id) return (C_Spell and C_Spell.GetSpellLink and C_Spell.GetSpellLink(id)) or (GetSpellLink and GetSpellLink(id)) end
 local function iconeSort(id) return (C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(id)) or (GetSpellTexture and GetSpellTexture(id)) end
@@ -50,6 +54,7 @@ local function bulle(self)
   for _, c in ipairs(e.composants) do GameTooltip:AddLine(("%d × %s"):format(c.qty * e.fois, nomObjet(c.id)), 0.8, 0.8, 0.8) end
   if e.patron > 0 then GameTooltip:AddLine("Patron à acheter : " .. lib.Argent(e.patron), 0.95, 0.65, 0.25) end
   GameTooltip:AddLine("Maj+clic : le lien dans le chat", 0.6, 0.6, 0.6)
+  if e.objet then GameTooltip:AddLine("Ctrl+clic droit : dans le Brouillon de Composants", 0.6, 0.6, 0.6) end
   GameTooltip:Show()
 end
 local function clic(self)
@@ -96,6 +101,7 @@ local function cadreEtape(i)
   r.icone:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
   r.icone:SetScript("OnEnter", bulle)
   r.icone:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  r.icone:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   r.icone:SetScript("OnClick", clic)
   r.nom = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   r.nom:SetPoint("TOPLEFT", AXE_X + 14 + ICONE + 10, -7)

@@ -48,5 +48,19 @@ test("Maîtrise : la route d'une tranche de Forge, 1 → 40, dans la fenêtre", 
     local avecIcone = 0
     for _, r in ipairs(vues) do if r.icone:IsShown() and r.icone.tex:GetTexture() then avecIcone = avecIcone + 1 end end
     assertEquals(#res.fabrications, avecIcone, "une icône par fabrication")
+    -- Ctrl+clic droit sur l'icône, comme sur un objet du jeu : l'objet entre dans le Brouillon de Composants.
+    local r1 = vues[1]
+    for _, r in ipairs(vues) do if r.etape.de < r1.etape.de then r1 = r end end
+    local id = assert(r1.etape.objet, "la première étape fabrique un objet")
+    local ctrl, alt, maj, souris = IsControlKeyDown, IsAltKeyDown, IsShiftKeyDown, GetMouseButtonClicked
+    IsControlKeyDown, IsAltKeyDown, IsShiftKeyDown = function() return true end, function() return false end, function() return false end
+    GetMouseButtonClicked = function() return "RightButton" end
+    local ok, err = pcall(r1.icone:GetScript("OnClick"), r1.icone, "RightButton")
+    IsControlKeyDown, IsAltKeyDown, IsShiftKeyDown, GetMouseButtonClicked = ctrl, alt, maj, souris
+    if not ok then error(err, 0) end
+    local auBrouillon = false
+    for _, l in ipairs(ComposantsDB.brouillon and ComposantsDB.brouillon.lines or {}) do auBrouillon = auBrouillon or l.id == id end
+    assertTrue(auBrouillon, "l'objet de l'étape au Brouillon de Composants")
+    if ComposantsFrame then ComposantsFrame:Hide() end
     MaitriseFrame:Hide()
 end)
