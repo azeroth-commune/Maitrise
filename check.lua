@@ -120,7 +120,7 @@ pas, pourquoi = Maitrise.Tranche(nil, "Couture", 100)
 assert(pas == nil and pourquoi:find("pas relevé", 1, true), tostring(pourquoi))
 print("Maîtrise : tranche (moins chère, revente, fabriquer, réemploi, paliers, exclusions, trous, sans prix) OK")
 
--- Règle des 20 % (Maitrise#9) : Gros (7 minerais, jaune dès 10, gris à 40) et Fin (1 minerai, jaune dès 10, gris à 30).
+-- Règle des 20 % (Maitrise#9) : Gros (7 minerais, jaune dès 20, gris à 40) et Fin (1 minerai, jaune dès 10, gris à 30).
 -- À 28, Fin ne donne qu'un point sur 10 (10 minerais le point) contre 0,6 pour Gros (11,7 le point) : sans la règle, Fin
 -- gagne ; avec, Gros couvre le point. Sans Gros, Fin reste (pas de trou).
 local R20 = { [1] = { 5001, "Fin", { M, 1 }, 1, 10, 30 }, [2] = { 5002, "Gros", { M, 7 }, 1, 20, 40 } }
@@ -128,9 +128,9 @@ res = scenario({ rang = 28, curseur = 29, marchands = { [M] = 10 }, recettes = R
 assert(#res.fabrications == 1 and res.fabrications[1].nom == "Gros", "point sous 20 % évité : " .. noms(res))
 res = scenario({ rang = 28, curseur = 29, marchands = { [M] = 10 }, recettes = { [1] = R20[1] } })
 assert(#res.fabrications == 1 and res.fabrications[1].nom == "Fin" and #res.trous == 0, "seule recette gardée : " .. noms(res))
--- Un point juste au-dessus de 20 % reste à la moins chère : à 26, Fin donne 0,2 (50 minerais le point) contre 0,7 pour Gros.
-res = scenario({ rang = 25, curseur = 26, marchands = { [M] = 10 }, recettes = R20 })
-assert(res.fabrications[1].nom == "Fin", "à 25 % la règle ne joue pas : " .. noms(res))
+-- Un point à 20 % tout juste reste à la moins chère : à 26, Fin donne 0,2 (5 minerais le point) contre 0,7 pour Gros (10).
+res = scenario({ rang = 26, curseur = 27, marchands = { [M] = 10 }, recettes = R20 })
+assert(res.fabrications[1].nom == "Fin", "à 20 % la règle ne joue pas : " .. noms(res))
 print("Maîtrise : règle des 20 % (évité si une autre recette couvre, gardé sinon) OK")
 
 -- Plages de couleur et fourchettes (Maitrise#11), seuils du client : orange sous le jaune, vert au milieu jaune/gris.

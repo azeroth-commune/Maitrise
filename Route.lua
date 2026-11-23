@@ -46,9 +46,10 @@ end
 
 -- La fourchette d'une étape (le 10e et le 90e centile de ses fabrications) d'après la chance ps de chacun de ses points,
 -- sans tirage : un point demande un nombre géométrique de fabrications (moyenne 1 / p, variance (1 − p) / p², 3e moment
--- centré (1 − p)(2 − p) / p³) ; on les additionne (cumulants) et on lit les centiles par Wilson-Hilferty (loi gamma de mêmes moments), arrondis au
--- plus près, jamais sous le nombre de points. Mesuré contre la convolution exacte et la sonde variance.lua : à une
--- fabrication près. Rend bas, haut ; nil pour une étape sans aléa (que des points à 100 %).
+-- centré (1 − p)(2 − p) / p³) ; on les additionne (cumulants) et on lit les centiles par Wilson-Hilferty (loi gamma de
+-- mêmes moments), arrondis au plus près, jamais sous le nombre de points. Mesuré contre la convolution exacte (relecture
+-- de la PR #14) : à une fabrication près quand tous les points sont à 20 % ou plus, à deux près avec des points de repli
+-- sous 20 % (étapes de 100 à 200 fabrications). Rend bas, haut ; nil pour une étape sans aléa (que des points à 100 %).
 -- ponytail: approximation (la convolution exacte coûte ~100x plus) ; l'asymétrie des étapes de 1 à 2 points reste à ±1.
 local Z = 1.2815515655 -- le 90e centile de la loi normale
 function ns.fourchette(ps)

@@ -164,7 +164,7 @@ test("Maîtrise : la frise colore l'axe et écrit les fourchettes", function()
         if e.plages then
             for i = 1, #e.plages do assertTrue(r.traits[i]:IsShown(), "un trait par plage de couleur") traits = traits + 1 end
             local d = r.detail:GetText()
-            if e.fourchette then
+            if e.fourchette and e.fourchette.bas < e.fourchette.haut then -- réduite à un nombre : écrite comme un nombre simple
                 fourchette = fourchette + 1
                 assertTrue(d:find(("%d à %d fabrications (%d en moyenne)"):format(e.fourchette.bas, e.fourchette.haut, e.fois), 1, true) ~= nil, d)
             else
@@ -174,6 +174,6 @@ test("Maîtrise : la frise colore l'axe et écrit les fourchettes", function()
             if e.incertaine then incertaine = incertaine + 1; assertTrue(d:find("incertaine", 1, true) ~= nil, d) end
         end
     end
-    assertTrue(traits > 0 and fourchette > 0, "des traits colorés et des fourchettes sur 1 → 150")
+    assertTrue(traits > 0 and fourchette > 0 and incertaine > 0, "des traits colorés, des fourchettes et une étape incertaine sur 1 → 150")
     MaitriseFrame:Hide()
 end)
