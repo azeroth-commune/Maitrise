@@ -84,3 +84,60 @@ test("Maîtrise : le menu des métiers affiche le métier choisi", function()
     assertEquals("Couture (20)", texte())
     MaitriseFrame:Hide()
 end)
+
+-- La tranche tenue (Maitrise#3) : créer depuis la fenêtre, recalculer d'un clic en gardant les choix, finir au curseur.
+test("Maîtrise : la tranche devient un projet tenu, se recalcule et se termine", function()
+    local guid = UnitGUID("player")
+    local function rang(r) AzerothCommuneDB.chars[guid].professions = { { name = "Forge", rank = r, max = 75 } } end
+    rang(1)
+    AzerothCommuneMarket[AzerothCommune.MaisonHV()] = { scanned = "22/11 21:00", time = time(), items = {
+        [2840] = { tiers = { { price = 40, qty = 200 } } }, [2835] = { tiers = { { price = 10, qty = 200 } } } } }
+    MaitriseDB = nil
+    SlashCmdList.MAITRISE("")
+    local dd = enfants(MaitriseFrame, function(c) return c.GenerateMenu and c.GetMenuDescription end)[1]
+    dd:GenerateMenu()
+    for _, e in dd:GetMenuDescription():EnumerateElementDescriptions() do
+        if MenuUtil.GetElementText(e) == "Forge (1)" then dd:Pick(e, MenuInputContext.MouseButton, "LeftButton") end
+    end
+    local curseur = enfants(MaitriseFrame, function(c) return c:GetObjectType() == "EditBox" end)[1]
+    curseur:SetText("30")
+    local faire = assert(bouton("En faire un projet"), "bouton de la tranche")
+    assertFalse(faire:IsEnabled(), "rien à tenir avant Calculer")
+    bouton("Calculer"):Click()
+    assertTrue(faire:IsEnabled())
+    faire:Click()
+    -- Le projet tenu : lignes fabrication et raison visibles dans Composants.
+    local projet
+    for _, x in ipairs(Composants.Projets()) do if x.name == "Maîtrise : Forge de 1 à 30" then projet = x end end
+    assertNotNil(projet, "projet « Maîtrise : Forge de 1 à 30 » (les niveaux dans le nom)")
+    assertEquals("Maîtrise : Forge de 1 à 30", projet.tenu)
+    assertTrue(ComposantsFrame:IsShown(), "le projet créé s'ouvre dans Composants")
+    assertEquals(projet, ComposantsDB.projets[ComposantsDB.courant], "sur ce projet")
+    ComposantsFrame:Hide()
+    assertTrue(#projet.lines > 0 and projet.lines[1].recette ~= nil and projet.lines[1].fois >= 1, "lignes fabrication")
+    assertEquals(0, #enfants(MaitriseFrame, function(c) return c:GetObjectType() == "Button" and c.GetText and c:GetText() == "En faire un projet" end), "le bouton montre l'état")
+    -- L'état sur le bouton : compétence sur le curseur, avance ou retard (au départ, dans les temps).
+    local etat
+    for _, c in ipairs(enfants(MaitriseFrame, function(c) return c:GetObjectType() == "Button" and c.GetText end)) do
+        if (c:GetText() or ""):find("Forge 1 / 30", 1, true) then etat = c end
+    end
+    assertNotNil(etat, "bouton d'état « Forge 1 / 30 »")
+    assertTrue(etat:GetText():find("dans les temps", 1, true) ~= nil, etat:GetText())
+    -- Un choix de case, puis le clic recalcule depuis la compétence réelle : le choix reste, la raison suit.
+    Composants.Choix(projet, 2840, "acheter")
+    rang(11)
+    etat:Click()
+    assertEquals("acheter", projet.choix[2840], "choix de case gardé")
+    assertEquals("Maîtrise : Forge de 11 à 30", projet.tenu)
+    assertEquals("Maîtrise : Forge de 11 à 30", projet.name, "le nom suit les niveaux")
+    assertEquals(1, #Composants.Projets(), "le même projet, pas un autre")
+    -- Atteindre le curseur : la tranche se termine, le projet est lâché, le bouton redevient « En faire un projet ».
+    rang(30)
+    MaitriseFrame:Hide()
+    SlashCmdList.MAITRISE("")
+    assertEquals(nil, projet.tenu, "projet lâché")
+    assertNotNil(bouton("En faire un projet"), "une autre tranche est possible")
+    assertNil(MaitriseDB.tranches[guid].Forge, "tranche oubliée")
+    MaitriseFrame:Hide()
+    if ComposantsFrame then ComposantsFrame:Hide() end
+end)
