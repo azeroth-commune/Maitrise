@@ -189,6 +189,7 @@ end
 
 local function choisir(nom)
   choix, res = nom, nil
+  if metierB then metierB:GenerateMenu() end -- choisi sans passer par le menu (à l'ouverture) : son texte suit
   local rang = rangDe(nom) or 0
   curseurE:SetText(tostring(math.min(rang + 10, 300)))
   dessinerFrise()
@@ -257,8 +258,7 @@ function ns.ouvrir()
     local premier = metiers()[1]
     if premier then choisir(premier.nom) else ecrireResume() end
   end
-  metierB:GenerateMenu()
-  if choix then metierB:OverrideText(("%s (%d)"):format(choix, rangDe(choix) or 0)) end
+  metierB:GenerateMenu() -- le menu affiche le métier coché (les métiers ont pu changer depuis la dernière ouverture)
 end
 
 SLASH_MAITRISE1 = "/maitrise"

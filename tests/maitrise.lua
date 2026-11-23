@@ -64,3 +64,23 @@ test("Maîtrise : la route d'une tranche de Forge, 1 → 40, dans la fenêtre", 
     if ComposantsFrame then ComposantsFrame:Hide() end
     MaitriseFrame:Hide()
 end)
+
+-- Le menu des métiers affiche le métier choisi, pas toujours le premier.
+test("Maîtrise : le menu des métiers affiche le métier choisi", function()
+    local guid = UnitGUID("player")
+    AzerothCommuneDB.chars[guid].professions = { { name = "Forge", rank = 1, max = 75 }, { name = "Couture", rank = 20, max = 75 } }
+    SlashCmdList.MAITRISE("")
+    local dd = enfants(MaitriseFrame, function(c) return c.GenerateMenu and c.GetMenuDescription end)[1]
+    local function texte() return dd.Text and dd.Text:GetText() or dd:GetText() end
+    dd:GenerateMenu()
+    for _, e in dd:GetMenuDescription():EnumerateElementDescriptions() do
+        if MenuUtil.GetElementText(e) == "Couture (20)" then dd:Pick(e, MenuInputContext.MouseButton, "LeftButton") end
+    end
+    assertEquals("Couture (20)", texte())
+    local curseur = enfants(MaitriseFrame, function(c) return c:GetObjectType() == "EditBox" end)[1]
+    assertEquals("30", curseur:GetText(), "curseur de la Couture : 20 + 10")
+    MaitriseFrame:Hide()
+    SlashCmdList.MAITRISE("") -- rouvrir garde le choix
+    assertEquals("Couture (20)", texte())
+    MaitriseFrame:Hide()
+end)
