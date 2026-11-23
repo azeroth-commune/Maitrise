@@ -19,6 +19,10 @@ local acns = {}
 for f in io.open("AzerothCommune/AzerothCommune.toc"):read("*a"):gmatch("([%w_]+)%.lua") do
   if f ~= "VendorData" and f ~= "RecettesClassic" and f ~= "CatalogueObjets" then assert(loadfile("AzerothCommune/" .. f .. ".lua"))("AzerothCommune", acns) end
 end
+-- Composants (dépôt voisin, chargé avant Maîtrise comme dans le jeu) : la tranche y tient un projet.
+local cns = {}
+for f in io.open("Composants/Composants.toc"):read("*a"):gmatch("([%w_]+)%.lua") do assert(loadfile("Composants/" .. f .. ".lua"))("Composants", cns) end
+assert(Composants and Composants.Tenir, "le global Composants posé")
 local ns = {}
 for f in io.open("Maitrise/Maitrise.toc"):read("*a"):gmatch("([%w_]+)%.lua") do assert(loadfile("Maitrise/" .. f .. ".lua"))("Maitrise", ns) end
 assert(Maitrise and Maitrise.Tranche, "le global Maitrise posé")
@@ -115,3 +119,46 @@ assert(pas == nil and pourquoi:find("dépasser", 1, true), tostring(pourquoi))
 pas, pourquoi = Maitrise.Tranche(nil, "Couture", 100)
 assert(pas == nil and pourquoi:find("pas relevé", 1, true), tostring(pourquoi))
 print("Maîtrise : tranche (moins chère, revente, fabriquer, réemploi, paliers, exclusions, trous, sans prix) OK")
+
+-- La tranche tenue (Maitrise#3) : créer, une seule par perso et métier, avance ou retard, recalculer, finir.
+local function rang(r) AzerothCommuneDB.chars[MOI].professions[1].rank = r end
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Lame", { M, 2 }, 1, 10, 20 } } })
+local t = assert(ns.trancheCreer("Forge", res))
+local _, p = ns.trancheDe("Forge")
+assert(p.tenu == "Maîtrise : Forge de 1 à 10" and p.name == "Maîtrise : Forge", "raison et nom : " .. tostring(p.tenu))
+assert(#p.lines == 1 and p.lines[1].recette == 1 and p.lines[1].fois == 9 and not p.lines[1].id, "une ligne fabrication")
+assert(ns.trancheCreer("Forge", res))
+local _, p2 = ns.trancheDe("Forge")
+assert(p2 == p and #Composants.Projets() == 1, "au plus une tranche par perso et métier : le projet est repris")
+assert(select(2, ns.trancheDe("Forge")) == p and ns.trancheDe("Couture") == nil)
+-- Avance ou retard : à 5, la route prévoyait 4 des 9 fabrications ; aucune faite = en avance.
+rang(5)
+assert(ns.trancheEtat("Forge").texte == "Forge 5 / 10 · en avance (4)", ns.trancheEtat("Forge").texte)
+ns.trancheCompter(999) -- pas une recette de la tranche
+assert(t.faites == 0, "un autre sort ne compte pas")
+for i = 1, 4 do ns.trancheCompter(1) end
+assert(ns.trancheEtat("Forge").texte == "Forge 5 / 10 · dans les temps")
+ns.trancheCompter(1)
+assert(ns.trancheEtat("Forge").texte == "Forge 5 / 10 · en retard (1)", ns.trancheEtat("Forge").texte)
+-- Recalculer : depuis 5 au même curseur, les choix de case restent, le décompte repart.
+Composants.Choix(p, M, "acheter")
+local r2 = assert(ns.trancheRecalculer("Forge"))
+assert(r2.de == 5 and r2.a == 10 and p.lines[1].fois == 5 and p.choix[M] == "acheter", "recalcul : lignes neuves, choix gardés")
+assert(t ~= ns.trancheDe("Forge") and ns.trancheDe("Forge").faites == 0 and ns.trancheDe("Forge").de == 5)
+assert(p.tenu == "Maîtrise : Forge de 5 à 10", p.tenu)
+-- Reprendre plus haut : même projet, nouveau curseur.
+assert(ns.trancheRecalculer("Forge", 8) and p.tenu == "Maîtrise : Forge de 5 à 8")
+-- Finir : à la compétence du curseur, le projet est lâché, la tranche oubliée, le projet reste.
+rang(8)
+assert(ns.trancheEtat("Forge") == nil and p.tenu == nil and ns.trancheDe("Forge") == nil, "tranche terminée")
+assert(Composants.Projet(p.id), "le projet reste dans Composants")
+-- Abandonner ; un projet supprimé dans Composants fait oublier la tranche.
+rang(5)
+assert(ns.trancheCreer("Forge", scenario({ rang = 5, curseur = 10, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Lame", { M, 2 }, 1, 10, 20 } } })))
+ns.trancheAbandonner("Forge")
+assert(ns.trancheDe("Forge") == nil and Composants.Projet(p.id))
+assert(ns.trancheCreer("Forge", res))
+local _, p3 = ns.trancheDe("Forge")
+Composants.Supprimer(p3.id)
+assert(ns.trancheDe("Forge") == nil, "projet supprimé : tranche oubliée")
+print("Maîtrise : tranche tenue (créer, une par métier, avance/retard, recalcul garde les choix, fin, abandon) OK")
