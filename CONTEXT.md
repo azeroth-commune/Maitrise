@@ -36,4 +36,11 @@ _Avoid_: patron rare, recette achetée
 Le nombre de fabrications qu'une étape demande 8 fois sur 10 (du 10e au 90e centile), affiché à côté de la moyenne pour une étape jaune ou verte ; une étape orange n'en a pas (une fabrication = un point). La variabilité se montre ; elle ne se traduit pas en achats de marge (mesuré au grill du 23/11 : une marge coûte cher et se perd).
 _Avoid_: marge, intervalle de confiance
 
+**Apprentissage**:
+Une recette de la route que le personnage ne connaît pas encore (chez un maître, ou par un patron vendu ou à l'HV) ; une ligne à part dans la frise, au niveau de sa première étape, avec sa source et son prix (« prix inconnu » sinon). Une recette connue n'en a pas ; le patron n'est pas répété sur l'étape.
+_Avoid_: patron (sur l'étape)
+
+**Une fois sur dix**:
+Le coût net de la tranche au 90e centile, affiché dans le résumé : le net moyen plus, étape par étape, le net par fabrication × les fabrications au-dessus de la moyenne. Un majorant prudent (somme de centiles), égal au net moyen quand tout est orange.
+
 **Fabrication** : une ligne « recette × nombre de fois » d'un projet tenu, voir le glossaire de Composants.

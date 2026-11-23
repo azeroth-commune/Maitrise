@@ -48,7 +48,8 @@ function ns.recettesDuMetier(base, metier, connues, prixPatron)
       if patronHV then prix = hv end
       if connue or SOURCES[r.source] or patronHV then
         out[#out + 1] = { key = k, name = r.name, learn = r.level or 1, y = r.yellow, g = r.grey, o = r.output,
-          n = math.max(1, r.made_min or 1), reag = r.reagents or {}, pattern = prix, patronHV = patronHV or nil }
+          n = math.max(1, r.made_min or 1), reag = r.reagents or {}, pattern = prix, patronHV = patronHV or nil,
+          src = r.source, objetPatron = r.patron, connue = connue and true or nil }
       end
     end
   end
@@ -275,7 +276,7 @@ function ns.route(rs, achat, revente, FROM, TO)
     P, need = newP, req
   end
   -- Mise en forme : les fabrications (une ligne par suite de points sur la même recette) et les trous.
-  local fab, trous = {}, {}
+  local fab, trous, apprentissages, vues = {}, {}, {}, {}
   for s = FROM, TO - 1 do
     local b = bestPlan.steps[s]
     if b then
@@ -284,6 +285,14 @@ function ns.route(rs, achat, revente, FROM, TO)
         last = { de = s, a = s, cle = b.r.key, nom = b.r.name, fois = 0, patron = b.r.pattern, patronHV = b.r.patronHV, objet = b.r.o,
           n = b.r.n, composants = b.r.reag, plages = {}, chances = {} }
         fab[#fab + 1] = last
+        -- Une recette à apprendre (Maitrise#13) : au niveau de sa première étape ; rien pour une recette connue ou d'emblée.
+        local r = b.r
+        if not vues[r] and not r.connue and r.src ~= "d'emblée" then
+          vues[r] = true
+          apprentissages[#apprentissages + 1] = { niveau = s, cle = r.key, nom = r.name, patronHV = r.patronHV,
+            source = r.patronHV and "Patron à l'HV" or (r.src == "maître" and "Maître" or "Patron"),
+            prix = r.pattern > 0 and r.pattern or nil, objetPatron = r.src ~= "maître" and r.objetPatron or nil }
+        end
       end
       last.a, last.fois = s + 1, last.fois + b.crafts
       last.coutNet = (last.coutNet or 0) + b.net * b.crafts
@@ -321,7 +330,8 @@ function ns.route(rs, achat, revente, FROM, TO)
   table.sort(sp)
   return { de = FROM, a = TO, fabrications = fab, achats = bestPlan.list, totalAchats = bestPlan.achats,
     patrons = bestPlan.patrons, total = bestPlan.achats + bestPlan.patrons, revente = bestPlan.revente, trous = trous,
-    sansPrix = sp, incomplet = bestPlan.incomplet, net = net, netUneSurDix = math.floor(dix + 0.5) }
+    sansPrix = sp, incomplet = bestPlan.incomplet, net = net, netUneSurDix = math.floor(dix + 0.5),
+    apprentissages = apprentissages }
 end
 
 -- La compétence du personnage (GUID, nil = le connecté) dans ce métier, d'après le relevé du socle ; et ses métiers.
