@@ -1,0 +1,10 @@
+## Interface: 16001
+## Title: Maîtrise
+## Category: Professions
+## Category-frFR: Métiers
+## Notes: Monter un métier au moindre coût, tranche par tranche : choisis jusqu'où tu montes ce soir, Maîtrise calcule la route (quelle recette, combien de fois) aux prix de l'HV du moment, réemplois compris et revente au marchand déduite. /maitrise
+## Version: 0.1.0
+## IconTexture: Interface\Icons\INV_Misc_Book_11
+## Dependencies: AzerothCommune, Composants
+Route.lua
+Fenetre.lua
