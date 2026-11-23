@@ -185,22 +185,20 @@ local function afficher(r)
 end
 
 -- Le bouton de la tranche (règle « info cliquable ») : sans tranche, « En faire un projet » ; avec, son état (compétence
--- sur le curseur, avance ou retard sur la route). Relu à l'ouverture, après chaque fabrication comptée et toutes les 5 s
--- tant que la fenêtre est ouverte, par le socle seulement (jamais GetProfessions).
+-- sur le curseur : la progression, rien d'autre). Relu à l'ouverture et toutes les 5 s tant que la fenêtre est ouverte, par le socle seulement (jamais GetProfessions).
 local function majBouton()
   if not (frame and frame:IsShown() and choix) then return end
   local e = ns.trancheEtat(choix)
   if e then etatB:SetText(e.texte); etatB:Enable()
   else etatB:SetText("En faire un projet"); etatB:SetEnabled(res ~= nil and res.metier == choix) end
 end
-ns.majBouton = majBouton
 
 local function bulleTranche(self)
   GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
   local t = choix and ns.trancheDe(choix)
   if t then
     GameTooltip:AddLine("Tranche en cours", 1, 0.82, 0)
-    GameTooltip:AddLine(("%s : de %d à %d, %d fabrication(s) comptée(s)."):format(choix, t.de, t.a, t.faites), 0.8, 0.8, 0.8)
+    GameTooltip:AddLine(("%s : de %d à %d."):format(choix, t.de, t.a), 0.8, 0.8, 0.8)
     GameTooltip:AddLine("Clic : recalculer depuis ta compétence jusqu'au même curseur", 0.6, 0.6, 0.6)
     GameTooltip:AddLine("Clic droit : reprendre plus haut, ou abandonner", 0.6, 0.6, 0.6)
   else

@@ -133,7 +133,7 @@ res = scenario({ rang = 25, curseur = 26, marchands = { [M] = 10 }, recettes = R
 assert(res.fabrications[1].nom == "Fin", "à 25 % la règle ne joue pas : " .. noms(res))
 print("Maîtrise : règle des 20 % (évité si une autre recette couvre, gardé sinon) OK")
 
--- La tranche tenue (Maitrise#3) : créer, une seule par perso et métier, avance ou retard, recalculer, finir.
+-- La tranche tenue (Maitrise#3) : créer, une seule par perso et métier, progression, recalculer, finir.
 local function rang(r) AzerothCommuneDB.chars[MOI].professions[1].rank = r end
 res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Lame", { M, 2 }, 1, 10, 20 } } })
 local t = assert(ns.trancheCreer("Forge", res))
@@ -144,20 +144,18 @@ assert(ns.trancheCreer("Forge", res))
 local _, p2 = ns.trancheDe("Forge")
 assert(p2 == p and #Composants.Projets() == 1, "au plus une tranche par perso et métier : le projet est repris")
 assert(select(2, ns.trancheDe("Forge")) == p and ns.trancheDe("Couture") == nil)
--- Avance ou retard : à 5, la route prévoyait 4 des 9 fabrications ; aucune faite = en avance.
+-- La progression : « <métier> <compétence> / <curseur> », rien d'autre (ni avance, ni retard, ni décompte).
 rang(5)
-assert(ns.trancheEtat("Forge").texte == "Forge 5 / 10 · en avance (4)", ns.trancheEtat("Forge").texte)
-ns.trancheCompter(999) -- pas une recette de la tranche
-assert(t.faites == 0, "un autre sort ne compte pas")
-for i = 1, 4 do ns.trancheCompter(1) end
-assert(ns.trancheEtat("Forge").texte == "Forge 5 / 10 · dans les temps")
-ns.trancheCompter(1)
-assert(ns.trancheEtat("Forge").texte == "Forge 5 / 10 · en retard (1)", ns.trancheEtat("Forge").texte)
--- Recalculer : depuis 5 au même curseur, les choix de case restent, le décompte repart.
+assert(ns.trancheEtat("Forge").texte == "Forge 5 / 10", ns.trancheEtat("Forge").texte)
+assert(ns.trancheCompter == nil and t.faites == nil and t.etapes == nil, "plus de décompte des fabrications")
+-- Une tranche gardée par une version plus ancienne (faites, etapes) se lit sans erreur.
+t.faites, t.etapes = 3, { { de = 1, a = 10, cle = 1, fois = 9 } }
+assert(ns.trancheEtat("Forge").texte == "Forge 5 / 10")
+-- Recalculer : depuis 5 au même curseur, les choix de case restent.
 Composants.Choix(p, M, "acheter")
 local r2 = assert(ns.trancheRecalculer("Forge"))
 assert(r2.de == 5 and r2.a == 10 and p.lines[1].fois == 5 and p.choix[M] == "acheter", "recalcul : lignes neuves, choix gardés")
-assert(t ~= ns.trancheDe("Forge") and ns.trancheDe("Forge").faites == 0 and ns.trancheDe("Forge").de == 5)
+assert(t ~= ns.trancheDe("Forge") and ns.trancheDe("Forge").faites == nil and ns.trancheDe("Forge").de == 5)
 assert(p.tenu == "Maîtrise : Forge de 5 à 10", p.tenu)
 -- Reprendre plus haut : même projet, nouveau curseur.
 assert(ns.trancheRecalculer("Forge", 8) and p.tenu == "Maîtrise : Forge de 5 à 8" and p.name == p.tenu, "le nom suit les niveaux")
@@ -179,4 +177,4 @@ assert(ns.trancheCreer("Forge", res))
 local _, p3 = ns.trancheDe("Forge")
 Composants.Supprimer(p3.id)
 assert(ns.trancheDe("Forge") == nil, "projet supprimé : tranche oubliée")
-print("Maîtrise : tranche tenue (créer, une par métier, avance/retard, recalcul garde les choix, fin, abandon) OK")
+print("Maîtrise : tranche tenue (créer, une par métier, progression, recalcul garde les choix, fin, abandon) OK")

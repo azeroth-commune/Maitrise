@@ -116,13 +116,13 @@ test("Maîtrise : la tranche devient un projet tenu, se recalcule et se termine"
     ComposantsFrame:Hide()
     assertTrue(#projet.lines > 0 and projet.lines[1].recette ~= nil and projet.lines[1].fois >= 1, "lignes fabrication")
     assertEquals(0, #enfants(MaitriseFrame, function(c) return c:GetObjectType() == "Button" and c.GetText and c:GetText() == "En faire un projet" end), "le bouton montre l'état")
-    -- L'état sur le bouton : compétence sur le curseur, avance ou retard (au départ, dans les temps).
+    -- L'état sur le bouton : la progression, compétence sur le curseur, rien d'autre.
     local etat
     for _, c in ipairs(enfants(MaitriseFrame, function(c) return c:GetObjectType() == "Button" and c.GetText end)) do
         if (c:GetText() or ""):find("Forge 1 / 30", 1, true) then etat = c end
     end
     assertNotNil(etat, "bouton d'état « Forge 1 / 30 »")
-    assertTrue(etat:GetText():find("dans les temps", 1, true) ~= nil, etat:GetText())
+    assertEquals("Forge 1 / 30", etat:GetText(), "la progression seulement")
     -- Un choix de case, puis le clic recalcule depuis la compétence réelle : le choix reste, la raison suit.
     Composants.Choix(projet, 2840, "acheter")
     rang(11)
