@@ -68,11 +68,13 @@ local function chance(r, s)
 end
 
 -- Couleur de la recette à la compétence s (seuils du client) : orange sous le jaune, jaune jusqu'au milieu entre jaune et
--- gris, vert ensuite (la chance y passe à 50 %).
+-- gris, vert ensuite (la chance y passe à 50 %), gris au seuil gris (la route n'en prend jamais ; le panneau, si).
 local function couleur(r, s)
+  if s >= r.g then return "gris" end
   if r.y == 0 or s < r.y then return "orange" end
   return s < (r.y + r.g) / 2 and "jaune" or "vert"
 end
+ns.couleur = couleur
 
 -- La fourchette d'une étape (le 10e et le 90e centile de ses fabrications) d'après la chance ps de chacun de ses points,
 -- sans tirage : un point demande un nombre géométrique de fabrications (moyenne 1 / p, variance (1 − p) / p², 3e moment

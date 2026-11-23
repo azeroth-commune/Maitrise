@@ -10,6 +10,7 @@ C_Timer = { After = noop, NewTicker = noop }
 C_Item = { GetItemInfo = noop, GetItemIconByID = noop }
 date, time = os.date, os.time
 GetTime = function() return 0 end
+GetCoinTextureString = function(c) return c .. "c" end
 UnitFactionGroup = function() return "Alliance" end
 geterrorhandler = function() return function(e) error(e, 0) end end
 local MOI = "Player-6942-0000000E"
@@ -285,9 +286,9 @@ assert(select(2, ns.trancheDe("Forge")) == p and ns.trancheDe("Couture") == nil)
 -- La progression : « <métier> <compétence> / <curseur> », rien d'autre (ni avance, ni retard, ni décompte).
 rang(5)
 assert(ns.trancheEtat("Forge").texte == "Forge 5 / 10", ns.trancheEtat("Forge").texte)
-assert(ns.trancheCompter == nil and t.faites == nil and t.etapes == nil, "plus de décompte des fabrications")
--- Une tranche gardée par une version plus ancienne (faites, etapes) se lit sans erreur.
-t.faites, t.etapes = 3, { { de = 1, a = 10, cle = 1, fois = 9 } }
+assert(ns.trancheCompter == nil and t.faites == nil, "plus de décompte des fabrications")
+-- Une tranche gardée par une version plus ancienne (faites, sans etapes) se lit sans erreur.
+t.faites, t.etapes = 3, nil
 assert(ns.trancheEtat("Forge").texte == "Forge 5 / 10")
 -- Recalculer : depuis 5 au même curseur, les choix de case restent.
 Composants.Choix(p, M, "acheter")
@@ -316,3 +317,45 @@ local _, p3 = ns.trancheDe("Forge")
 Composants.Supprimer(p3.id)
 assert(ns.trancheDe("Forge") == nil, "projet supprimé : tranche oubliée")
 print("Maîtrise : tranche tenue (créer, une par métier, progression, recalcul garde les choix, fin, abandon) OK")
+
+-- Le panneau de la fenêtre de métier : la tranche garde les lignes de la frise (sans l'objectif), le panneau les place à la
+-- compétence. RP : « A » (maître, 1, jaune 10, gris 20) de 1 à 10, « B » (patron vendu, 10, jaune 20, gris 30) de 10 à 30.
+rang(1)
+res = scenario({ rang = 1, curseur = 30, marchands = { [M] = 10 }, recettes = RP, maitres = MAITRE })
+t = assert(ns.trancheCreer("Forge", res))
+local function sorte(e) return e.apprendre and ("Apprendre " .. e.nom) or e.trou and "trou" or (e.nom .. " " .. e.de .. "-" .. e.a) end
+local vu = {}
+for _, e in ipairs(t.etapes) do vu[#vu + 1] = sorte(e) end
+assert(table.concat(vu, ", ") == "Apprendre A, A 1-10, Apprendre B, B 10-30", table.concat(vu, ", "))
+local frise = ns.etapesFrise(res)
+assert(#frise == #t.etapes + 1 and frise[#frise].fin, "la frise : les mêmes lignes, puis l'objectif")
+assert(t.etapes[2].fois == 9 and t.etapes[2].objet == 5001 and t.etapes[2].cle == 1 and t.etapes[3].prix == 300
+  and t.etapes[3].source == "Patron" and not t.etapes[2].composants, "ce qui est gardé : niveaux, fois, objet, prix, source ; pas les composants")
+local base = AzerothCommune:Lire("base des recettes")
+local connues = { [1] = true }
+local function lp(s) return ns.lignesPanneau(t.etapes, s, base, function(k) return connues[k] end) end
+local function resume(ls)
+  local o = {}
+  for _, l in ipairs(ls) do o[#o + 1] = l.etat .. ":" .. tostring(l.couleur) end
+  return table.concat(o, " ")
+end
+-- À 5 : A en cours (orange), B pas encore à portée (apprise à 10 : pas de couleur), son apprentissage à venir.
+assert(resume(lp(5)) == "passee:nil courante:orange avenir:nil avenir:nil", resume(lp(5)))
+-- À 12 : A passée (jaune à 12), B à apprendre maintenant et en cours (orange sous son jaune).
+assert(resume(lp(12)) == "passee:nil passee:jaune courante:nil courante:orange", resume(lp(12)))
+-- À 25 : A grise, B verte ; B apprise : son apprentissage passe.
+connues[2] = true
+assert(resume(lp(25)) == "passee:nil passee:gris passee:nil courante:vert", resume(lp(25)))
+local ls = lp(25)
+assert(ls[1].nom == "Apprendre A" and ls[1].droite == AzerothCommune.ArgentCourt(500), ls[1].droite)
+assert(ls[4].nom == "B" and ls[4].droite == ("10–30 ×%d"):format(t.etapes[4].fois), ls[4].droite)
+-- Un trou : sa ligne, ses niveaux, sans couleur.
+ns.trancheAbandonner("Forge")
+res = scenario({ rang = 1, curseur = 25, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Lame", { M, 1 }, 1, 10, 20 } } })
+t = assert(ns.trancheCreer("Forge", res))
+ls = ns.lignesPanneau(t.etapes, 22, base, function() return true end)
+assert(#ls == 3 and ls[3].etape.trou and ls[3].nom == "Aucune recette connue" and ls[3].droite == "20–25" and ls[3].etat == "courante"
+  and ls[3].couleur == nil and ls[2].couleur == "gris", resume(ls))
+assert(ls[1].droite == "prix ?", "maître sans prix relevé : " .. ls[1].droite)
+ns.trancheAbandonner("Forge")
+print("Maîtrise : panneau de la fenêtre de métier (étapes gardées, en cours, passées, couleur à la compétence, apprentissages, trous) OK")
