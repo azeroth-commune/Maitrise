@@ -7,7 +7,7 @@ local lib = AzerothCommune
 -- La montée des métiers de récolte et de la Pêche ne s'achète pas (hors du PRD).
 local RECOLTE = { ["Minage"] = true, ["Herboristerie"] = true, ["Dépeçage"] = true, ["Pêche"] = true }
 local nomsDeSession = {}
-local frame, metierB, curseurE, calculB, resume, tabAchats, vues, frise
+local frame, metierB, curseurE, calculB, etatB, resume, tabAchats, vues, frise
 local choix -- le métier choisi
 local res -- la dernière tranche calculée
 
@@ -177,28 +177,86 @@ local function ecrireResume()
   resume:SetText(table.concat(l, "\n"))
 end
 
-local function calculer()
-  if not choix then return end
-  local r, err = ns.tranche(nil, choix, tonumber(curseurE:GetText()))
-  if not r then print("|cffffd100Maîtrise :|r " .. err) return end
+local function afficher(r)
   res = r
   dessinerFrise()
   tabAchats:SetData(res.achats)
   ecrireResume()
 end
 
+-- Le bouton de la tranche (règle « info cliquable ») : sans tranche, « En faire un projet » ; avec, son état (compétence
+-- sur le curseur, avance ou retard sur la route). Relu à l'ouverture, après chaque fabrication comptée et toutes les 5 s
+-- tant que la fenêtre est ouverte, par le socle seulement (jamais GetProfessions).
+local function majBouton()
+  if not (frame and frame:IsShown() and choix) then return end
+  local e = ns.trancheEtat(choix)
+  if e then etatB:SetText(e.texte); etatB:Enable()
+  else etatB:SetText("En faire un projet"); etatB:SetEnabled(res ~= nil and res.metier == choix) end
+end
+ns.majBouton = majBouton
+
+local function bulleTranche(self)
+  GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+  local t = choix and ns.trancheDe(choix)
+  if t then
+    GameTooltip:AddLine("Tranche en cours", 1, 0.82, 0)
+    GameTooltip:AddLine(("%s : de %d à %d, %d fabrication(s) comptée(s)."):format(choix, t.de, t.a, t.faites), 0.8, 0.8, 0.8)
+    GameTooltip:AddLine("Clic : recalculer depuis ta compétence jusqu'au même curseur", 0.6, 0.6, 0.6)
+    GameTooltip:AddLine("Clic droit : reprendre plus haut, ou abandonner", 0.6, 0.6, 0.6)
+  else
+    GameTooltip:AddLine("Un projet Composants tenu : les besoins de cette tranche seulement.", 0.8, 0.8, 0.8)
+  end
+  GameTooltip:Show()
+end
+
+local function recalculer(curseur)
+  local r, err = ns.trancheRecalculer(choix, curseur)
+  if not r then print("|cffffd100Maîtrise :|r " .. err) return end
+  curseurE:SetText(tostring(r.a))
+  afficher(r)
+  majBouton()
+end
+
+local function clicTranche(_, bouton)
+  if not choix then return end
+  local t = ns.trancheDe(choix)
+  if not t then
+    local _, err = ns.trancheCreer(choix, res)
+    if err then print("|cffffd100Maîtrise :|r " .. err) end
+  elseif bouton == "RightButton" then
+    MenuUtil.CreateContextMenu(etatB, function(_, root)
+      local c = tonumber(curseurE:GetText())
+      root:CreateButton(c and ("Reprendre jusqu'à %d"):format(c) or "Reprendre (saisis un curseur)", function() recalculer(c) end)
+      root:CreateButton("Abandonner la tranche", function() ns.trancheAbandonner(choix); majBouton() end)
+    end)
+  else
+    recalculer()
+  end
+  majBouton()
+end
+
+local function calculer()
+  if not choix then return end
+  local r, err = ns.tranche(nil, choix, tonumber(curseurE:GetText()))
+  if not r then print("|cffffd100Maîtrise :|r " .. err) return end
+  afficher(r)
+  majBouton()
+end
+
 local function choisir(nom)
   choix, res = nom, nil
   if metierB then metierB:GenerateMenu() end -- choisi sans passer par le menu (à l'ouverture) : son texte suit
   local rang = rangDe(nom) or 0
-  curseurE:SetText(tostring(math.min(rang + 10, 300)))
+  local t = ns.trancheDe(nom)
+  curseurE:SetText(tostring(t and t.a or math.min(rang + 10, 300)))
   dessinerFrise()
   tabAchats:SetData({})
   ecrireResume()
+  majBouton()
 end
 
 local function construire()
-  frame = lib.Fenetre("MaitriseFrame", "Maîtrise", 560, 460)
+  frame = lib.Fenetre("MaitriseFrame", "Maîtrise", 660, 460)
   metierB = CreateFrame("DropdownButton", nil, frame, "WowStyle1DropdownTemplate")
   metierB:SetWidth(180)
   metierB:SetPoint("TOPLEFT", 14, -40)
@@ -224,6 +282,15 @@ local function construire()
   calculB:SetPoint("LEFT", curseurE, "RIGHT", 12, 0)
   calculB:SetText("Calculer")
   calculB:SetScript("OnClick", calculer)
+  etatB = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+  etatB:SetSize(240, 22)
+  etatB:SetPoint("LEFT", calculB, "RIGHT", 8, 0)
+  etatB:SetText("En faire un projet")
+  etatB:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  etatB:SetScript("OnClick", clicTranche)
+  etatB:SetScript("OnEnter", bulleTranche)
+  etatB:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  C_Timer.NewTicker(5, majBouton)
   resume = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   resume:SetPoint("TOPLEFT", 16, -72)
   resume:SetPoint("RIGHT", -16, 0)
@@ -258,6 +325,7 @@ function ns.ouvrir()
     local premier = metiers()[1]
     if premier then choisir(premier.nom) else ecrireResume() end
   end
+  majBouton()
   metierB:GenerateMenu() -- le menu affiche le métier coché (les métiers ont pu changer depuis la dernière ouverture)
 end
 
