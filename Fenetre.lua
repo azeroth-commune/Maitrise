@@ -221,10 +221,12 @@ local function clicTranche(_, bouton)
   if not choix then return end
   local t = ns.trancheDe(choix)
   if not t then
-    local _, err = ns.trancheCreer(choix, res)
-    if err then print("|cffffd100Maîtrise :|r " .. err) end
+    local t, err = ns.trancheCreer(choix, res)
+    if not t then print("|cffffd100Maîtrise :|r " .. err)
+    else Composants.Ouvrir(t.projet) end -- le projet créé s'ouvre dans Composants
   elseif bouton == "RightButton" then
     MenuUtil.CreateContextMenu(etatB, function(_, root)
+      root:CreateButton("Ouvrir le projet", function() Composants.Ouvrir(t.projet) end)
       local c = tonumber(curseurE:GetText())
       -- Sans curseur saisi (ou le même), pas de « Reprendre » : le clic gauche recalcule déjà jusqu'au même curseur.
       if c and c ~= t.a then root:CreateButton(("Reprendre jusqu'à %d"):format(c), function() recalculer(c) end) end

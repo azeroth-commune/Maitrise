@@ -38,6 +38,8 @@ end
 local function tenir(p, metier, res, curseur)
   local etapes = {}
   for _, f in ipairs(res.fabrications) do etapes[#etapes + 1] = { de = f.de, a = f.a, cle = f.cle, fois = f.fois } end
+  -- Le nom du projet porte les niveaux, comme sa raison (liste « Projets » de Composants), et les suit au recalcul.
+  Composants.Renommer(p, raison(metier, res.de, curseur))
   Composants.Tenir(p, raison(metier, res.de, curseur), lignes(res))
   local g = UnitGUID("player")
   db().tranches[g] = db().tranches[g] or {}
@@ -46,7 +48,7 @@ local function tenir(p, metier, res, curseur)
   return t
 end
 
--- Crée la tranche du métier d'après la route res (ns.tranche) : un projet « Maîtrise : <métier> » tenu ; celui de la
+-- Crée la tranche du métier d'après la route res (ns.tranche) : un projet « Maîtrise : <métier> de X à Y » tenu ; celui de la
 -- tranche déjà là est repris. Rend la tranche, ou nil et la raison.
 function ns.trancheCreer(metier, res)
   if not res then return nil, "calcule d'abord la tranche (Calculer)" end
@@ -57,7 +59,7 @@ function ns.trancheCreer(metier, res)
   if res.metier ~= metier or res.de ~= rang then return nil, "ta compétence a changé depuis le calcul : refais Calculer" end
   if #res.fabrications == 0 then return nil, "aucune recette à fabriquer sur cette tranche" end
   local _, p = ns.trancheDe(metier)
-  p = p or Composants.NouveauProjet({ name = "Maîtrise : " .. metier })
+  p = p or Composants.NouveauProjet({ name = raison(metier, res.de, res.a) })
   return tenir(p, metier, res, res.a)
 end
 

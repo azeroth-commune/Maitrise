@@ -125,7 +125,7 @@ local function rang(r) AzerothCommuneDB.chars[MOI].professions[1].rank = r end
 res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Lame", { M, 2 }, 1, 10, 20 } } })
 local t = assert(ns.trancheCreer("Forge", res))
 local _, p = ns.trancheDe("Forge")
-assert(p.tenu == "Maîtrise : Forge de 1 à 10" and p.name == "Maîtrise : Forge", "raison et nom : " .. tostring(p.tenu))
+assert(p.tenu == "Maîtrise : Forge de 1 à 10" and p.name == "Maîtrise : Forge de 1 à 10", "raison et nom : " .. tostring(p.tenu))
 assert(#p.lines == 1 and p.lines[1].recette == 1 and p.lines[1].fois == 9 and not p.lines[1].id, "une ligne fabrication")
 assert(ns.trancheCreer("Forge", res))
 local _, p2 = ns.trancheDe("Forge")
@@ -147,7 +147,7 @@ assert(r2.de == 5 and r2.a == 10 and p.lines[1].fois == 5 and p.choix[M] == "ach
 assert(t ~= ns.trancheDe("Forge") and ns.trancheDe("Forge").faites == 0 and ns.trancheDe("Forge").de == 5)
 assert(p.tenu == "Maîtrise : Forge de 5 à 10", p.tenu)
 -- Reprendre plus haut : même projet, nouveau curseur.
-assert(ns.trancheRecalculer("Forge", 8) and p.tenu == "Maîtrise : Forge de 5 à 8")
+assert(ns.trancheRecalculer("Forge", 8) and p.tenu == "Maîtrise : Forge de 5 à 8" and p.name == p.tenu, "le nom suit les niveaux")
 -- Finir : à la compétence du curseur, le projet est lâché, la tranche oubliée, le projet reste.
 rang(8)
 assert(ns.trancheEtat("Forge") == nil and p.tenu == nil and ns.trancheDe("Forge") == nil, "tranche terminée")

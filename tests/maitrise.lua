@@ -108,9 +108,12 @@ test("Maîtrise : la tranche devient un projet tenu, se recalcule et se termine"
     faire:Click()
     -- Le projet tenu : lignes fabrication et raison visibles dans Composants.
     local projet
-    for _, x in ipairs(Composants.Projets()) do if x.name == "Maîtrise : Forge" then projet = x end end
-    assertNotNil(projet, "projet « Maîtrise : Forge »")
+    for _, x in ipairs(Composants.Projets()) do if x.name == "Maîtrise : Forge de 1 à 30" then projet = x end end
+    assertNotNil(projet, "projet « Maîtrise : Forge de 1 à 30 » (les niveaux dans le nom)")
     assertEquals("Maîtrise : Forge de 1 à 30", projet.tenu)
+    assertTrue(ComposantsFrame:IsShown(), "le projet créé s'ouvre dans Composants")
+    assertEquals(projet, ComposantsDB.projets[ComposantsDB.courant], "sur ce projet")
+    ComposantsFrame:Hide()
     assertTrue(#projet.lines > 0 and projet.lines[1].recette ~= nil and projet.lines[1].fois >= 1, "lignes fabrication")
     assertEquals(0, #enfants(MaitriseFrame, function(c) return c:GetObjectType() == "Button" and c.GetText and c:GetText() == "En faire un projet" end), "le bouton montre l'état")
     -- L'état sur le bouton : compétence sur le curseur, avance ou retard (au départ, dans les temps).
@@ -126,6 +129,7 @@ test("Maîtrise : la tranche devient un projet tenu, se recalcule et se termine"
     etat:Click()
     assertEquals("acheter", projet.choix[2840], "choix de case gardé")
     assertEquals("Maîtrise : Forge de 11 à 30", projet.tenu)
+    assertEquals("Maîtrise : Forge de 11 à 30", projet.name, "le nom suit les niveaux")
     assertEquals(1, #Composants.Projets(), "le même projet, pas un autre")
     -- Atteindre le curseur : la tranche se termine, le projet est lâché, le bouton redevient « En faire un projet ».
     rang(30)
