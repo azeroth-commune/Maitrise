@@ -126,6 +126,15 @@ res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RV
 assert(not res.fabrications[1].patronHV and res.patrons == 500, "patron vendu plus cher à l'HV : prix du marchand : " .. noms(res))
 res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RV })
 assert(res.patrons == 500 and not res.fabrications[1].patronHV, "patron vendu, pas à l'HV : prix du marchand : " .. noms(res))
+-- Une recette déjà connue est gardée quelle que soit sa source, apprise pour 0 et sans patron à l'HV.
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RH, connues = { [9] = true }, hv = { [7001] = { { 100, 1 } } } })
+assert(res.fabrications[1].nom == "Butin" and not res.fabrications[1].patronHV and res.patrons == 0 and res.total == 9 * 10,
+  "recette inconnue de source mais déjà connue : prix 0, pas de patron à l'HV : " .. res.total .. " " .. noms(res))
+RH[9][7] = "retirée"
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RH, connues = { [9] = true } })
+assert(res.fabrications[1].nom == "Butin" and res.patrons == 0, "recette retirée mais connue : gardée : " .. noms(res))
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RH })
+assert(res.fabrications[1].nom == "Lame", "recette retirée pas connue : écartée : " .. noms(res))
 print("Maîtrise : patron à l'HV OK")
 
 -- Un trou : aucune recette ne donne de point de 20 à 25.

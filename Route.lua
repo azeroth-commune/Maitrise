@@ -28,6 +28,8 @@ local COURT = 5 -- une étape de COURT points ou moins entre deux étapes de la 
 -- (r.patron, du socle) est aussi prise quand prixPatron(patron) donne le prix d'achat d'UN patron au dernier scan de l'HV
 -- (nil : pas en vente). Ce prix devient celui pour l'apprendre (pour un patron vendu, seulement s'il est moins cher que celui
 -- du marchand) et la recette est marquée patronHV (la frise le dit). Sans prixPatron : comme avant.
+-- Une recette que le personnage connaît déjà est gardée quelle que soit sa source (retirée, butin, quête…) : rien à apprendre
+-- (prix 0, pas de patron à l'HV), mais ni recharge ni seuils en moins.
 -- ponytail: un patron est souvent un objet unique au scan, parfois cher, pas toujours en vente : le prix est celui du scan, sans
 -- règle de prudence en plus.
 -- ponytail: le socle ne relève pas la spécialisation ni les réputations du personnage ; toute recette à condition qu'il ne
@@ -39,11 +41,12 @@ function ns.recettesDuMetier(base, metier, connues, prixPatron)
   for k, r in pairs(base) do
     if r.profession == metier and (r.cooldown or 0) == 0 and r.yellow and r.grey and r.grey > 1
       and (not r.condition or (connues and connues[k])) then
-      local prix = (r.source == "maître" and r.prix_maitre) or r.pattern_price or 0
-      local hv = prixPatron and r.patron and PATRON_HV[r.source] and prixPatron(r.patron)
+      local connue = connues and connues[k]
+      local prix = not connue and ((r.source == "maître" and r.prix_maitre) or r.pattern_price) or 0
+      local hv = not connue and prixPatron and r.patron and PATRON_HV[r.source] and prixPatron(r.patron)
       local patronHV = hv and (r.source == "inconnue" or prix == 0 or hv < prix)
       if patronHV then prix = hv end
-      if SOURCES[r.source] or patronHV then
+      if connue or SOURCES[r.source] or patronHV then
         out[#out + 1] = { key = k, name = r.name, learn = r.level or 1, y = r.yellow, g = r.grey, o = r.output,
           n = math.max(1, r.made_min or 1), reag = r.reagents or {}, pattern = prix, patronHV = patronHV or nil }
       end
