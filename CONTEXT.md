@@ -28,6 +28,10 @@ _Avoid_: taux, probabilité de skill-up
 Orange, jaune, vert ou gris selon le niveau du personnage par rapport aux seuils de la recette (ceux du client) ; elle fixe la chance d'un point.
 _Avoid_: difficulté
 
+**Patron à l'HV**:
+Un patron (ou plan, formule…) de butin ou de quête qu'on achète à l'hôtel des ventes pour apprendre une recette que ni un maître ni un marchand n'enseigne ; la route le compte une fois, au prix du dernier scan.
+_Avoid_: patron rare, recette achetée
+
 **Fourchette**:
 Le nombre de fabrications qu'une étape demande 8 fois sur 10 (du 10e au 90e centile), affiché à côté de la moyenne pour une étape jaune ou verte ; une étape orange n'en a pas (une fabrication = un point). La variabilité se montre ; elle ne se traduit pas en achats de marge (mesuré au grill du 23/11 : une marge coûte cher et se perd).
 _Avoid_: marge, intervalle de confiance

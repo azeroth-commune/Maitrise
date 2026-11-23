@@ -48,7 +48,7 @@ local function detailEtape(e)
     fab = ("%d à %d fabrications (%d en moyenne)"):format(e.fourchette.bas, e.fourchette.haut, e.fois)
   else fab = ("%d fabrication(s)"):format(e.fois) end
   return ("de %d à %d · %s%s%s"):format(e.de, e.a, fab, e.incertaine and " · |cffff9933incertaine|r" or "",
-    e.patron > 0 and (" · patron " .. lib.ArgentCourt(e.patron)) or "")
+    e.patron > 0 and ((e.patronHV and " · patron à l'HV " or " · patron ") .. lib.ArgentCourt(e.patron)) or "")
 end
 -- Le lien d'un objet : celui du jeu (chargé par la bulle au survol), sinon un lien fait à la main, que Composants lit
 -- aussi bien (il ne regarde que « item:<id> »).
@@ -67,7 +67,7 @@ local function bulle(self)
   GameTooltip:AddLine(" ")
   GameTooltip:AddLine(("De %d à %d : %d fabrication(s)"):format(e.de, e.a, e.fois), 1, 0.82, 0)
   for _, c in ipairs(e.composants) do GameTooltip:AddLine(("%d × %s"):format(c.qty * e.fois, nomObjet(c.id)), 0.8, 0.8, 0.8) end
-  if e.patron > 0 then GameTooltip:AddLine("Patron à acheter : " .. lib.Argent(e.patron), 0.95, 0.65, 0.25) end
+  if e.patron > 0 then GameTooltip:AddLine((e.patronHV and "Patron à acheter à l'HV : " or "Patron à acheter : ") .. lib.Argent(e.patron), 0.95, 0.65, 0.25) end
   GameTooltip:AddLine("Maj+clic : le lien dans le chat", 0.6, 0.6, 0.6)
   if e.objet then GameTooltip:AddLine("Ctrl+clic droit : dans le Brouillon de Composants", 0.6, 0.6, 0.6) end
   GameTooltip:Show()

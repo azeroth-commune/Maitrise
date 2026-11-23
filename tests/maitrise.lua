@@ -183,3 +183,33 @@ test("Maîtrise : la frise colore l'axe et écrit les fourchettes", function()
     assertTrue(traits > 0 and fourchette > 0 and incertaine > 0, "des traits colorés, des fourchettes et une étape incertaine sur 1 → 150")
     MaitriseFrame:Hide()
 end)
+
+test("Maîtrise : un patron à l'HV est dit « patron à l'HV » dans la frise", function()
+    local guid = UnitGUID("player")
+    AzerothCommuneDB.chars[guid].professions = { { name = "Forge", rank = 229, max = 300 } }
+    -- Les Eperons en mithril (sort 9964, 230 → 250) : patron de butin (7989), à l'HV pour 1 pc, composants à l'HV.
+    local base = AzerothCommune:Lire("base des recettes")
+    assertEquals(7989, base[9964].patron)
+    assertEquals("inconnue", base[9964].source)
+    local items = { [7989] = { tiers = { { price = 1, qty = 1 } } } }
+    for _, rq in ipairs(base[9964].reagents) do items[rq.id] = { tiers = { { price = 10, qty = 2000 } } } end
+    AzerothCommuneMarket[AzerothCommune.MaisonHV()] = { scanned = "22/11 21:00", time = time(), items = items }
+    MaitriseDB = nil
+    SlashCmdList.MAITRISE("")
+    local dd = enfants(MaitriseFrame, function(c) return c.GenerateMenu and c.GetMenuDescription end)[1]
+    dd:GenerateMenu()
+    for _, e in dd:GetMenuDescription():EnumerateElementDescriptions() do
+        if MenuUtil.GetElementText(e) == "Forge (229)" then dd:Pick(e, MenuInputContext.MouseButton, "LeftButton") end
+    end
+    enfants(MaitriseFrame, function(c) return c:GetObjectType() == "EditBox" end)[1]:SetText("250")
+    bouton("Calculer"):Click()
+    local trouve
+    for _, r in ipairs(etapes()) do
+        if r.etape.cle == 9964 and r.etape.patronHV then
+            trouve = true
+            assertTrue(r.detail:GetText():find("patron à l'HV", 1, true) ~= nil, r.detail:GetText())
+        end
+    end
+    assertTrue(trouve, "une étape des Eperons en mithril, patron à l'HV")
+    MaitriseFrame:Hide()
+end)

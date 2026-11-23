@@ -24,17 +24,32 @@ local COURT = 5 -- une étape de COURT points ou moins entre deux étapes de la 
 -- plus enseignée : AzerothCommune#67) sauf si le personnage la connaît déjà (connues = { [clé] = true }). Le prix pour
 -- l'apprendre : celui du maître relevé pour une recette de maître (AzerothCommune#72), sinon celui du patron. Triées par
 -- clé : un calcul se rejoue à l'identique.
+-- Patron à l'HV (Maitrise#15) : une recette « inconnue » (patron de butin ou de quête) ou « patron vendu » qui a un objet patron
+-- (r.patron, du socle) est aussi prise quand prixPatron(patron) donne le prix d'achat d'UN patron au dernier scan de l'HV
+-- (nil : pas en vente). Ce prix devient celui pour l'apprendre (pour un patron vendu, seulement s'il est moins cher que celui
+-- du marchand) et la recette est marquée patronHV (la frise le dit). Sans prixPatron : comme avant.
+-- Une recette que le personnage connaît déjà est gardée quelle que soit sa source (retirée, butin, quête…) : rien à apprendre
+-- (prix 0, pas de patron à l'HV), mais ni recharge ni seuils en moins.
+-- ponytail: un patron est souvent un objet unique au scan, parfois cher, pas toujours en vente : le prix est celui du scan, sans
+-- règle de prudence en plus.
 -- ponytail: le socle ne relève pas la spécialisation ni les réputations du personnage ; toute recette à condition qu'il ne
 -- connaît pas est écartée (prudent : jamais de recette inaccessible proposée).
 local SOURCES = { ["d'emblée"] = true, ["maître"] = true, ["patron vendu"] = true }
-function ns.recettesDuMetier(base, metier, connues)
+local PATRON_HV = { ["inconnue"] = true, ["patron vendu"] = true }
+function ns.recettesDuMetier(base, metier, connues, prixPatron)
   local out = {}
   for k, r in pairs(base) do
-    if r.profession == metier and SOURCES[r.source] and (r.cooldown or 0) == 0 and r.yellow and r.grey and r.grey > 1
+    if r.profession == metier and (r.cooldown or 0) == 0 and r.yellow and r.grey and r.grey > 1
       and (not r.condition or (connues and connues[k])) then
-      local prix = (r.source == "maître" and r.prix_maitre) or r.pattern_price or 0
-      out[#out + 1] = { key = k, name = r.name, learn = r.level or 1, y = r.yellow, g = r.grey, o = r.output,
-        n = math.max(1, r.made_min or 1), reag = r.reagents or {}, pattern = prix }
+      local connue = connues and connues[k]
+      local prix = not connue and ((r.source == "maître" and r.prix_maitre) or r.pattern_price) or 0
+      local hv = not connue and prixPatron and r.patron and PATRON_HV[r.source] and prixPatron(r.patron)
+      local patronHV = hv and (r.source == "inconnue" or prix == 0 or hv < prix)
+      if patronHV then prix = hv end
+      if connue or SOURCES[r.source] or patronHV then
+        out[#out + 1] = { key = k, name = r.name, learn = r.level or 1, y = r.yellow, g = r.grey, o = r.output,
+          n = math.max(1, r.made_min or 1), reag = r.reagents or {}, pattern = prix, patronHV = patronHV or nil }
+      end
     end
   end
   table.sort(out, function(a, b) return a.key < b.key end)
@@ -266,7 +281,7 @@ function ns.route(rs, achat, revente, FROM, TO)
     if b then
       local last = fab[#fab]
       if not (last and last.cle == b.r.key and last.a == s) then
-        last = { de = s, a = s, cle = b.r.key, nom = b.r.name, fois = 0, patron = b.r.pattern, objet = b.r.o,
+        last = { de = s, a = s, cle = b.r.key, nom = b.r.name, fois = 0, patron = b.r.pattern, patronHV = b.r.patronHV, objet = b.r.o,
           n = b.r.n, composants = b.r.reag, plages = {}, chances = {} }
         fab[#fab + 1] = last
       end
@@ -307,7 +322,7 @@ function ns.metiers(guid)
 end
 
 -- La tranche (personnage, métier, curseur) : la route du niveau actuel au curseur, aux prix du moment (socle). Rend
--- { de, a, fabrications = { { de, a, cle (le sort de la recette), nom, fois, patron, objet (nil : enchantement), n (produits
+-- { de, a, fabrications = { { de, a, cle (le sort de la recette), nom, fois, patron, patronHV (le patron vient de l'HV), objet (nil : enchantement), n (produits
 -- par fabrication), composants = { { id, qty } }, plages = { { de, a, couleur (« orange », « jaune », « vert ») } }, fourchette
 -- (le 10e et le 90e centile des fabrications : { bas =, haut = }, nil pour une étape orange), incertaine (plus de la moitié
 -- des points en vert) } }, achats = { { id, qty, cout } }, totalAchats, patrons,
@@ -340,7 +355,9 @@ function ns.tranche(guid, metier, curseur)
   local rc = lib:Lire("recettes connues", guid)
   local _, metiersPerso = next(rc and rc.persos or {})
   local connues = metiersPerso and metiersPerso[metier] and metiersPerso[metier].known
-  local res = ns.route(ns.recettesDuMetier(base, metier, connues), achat, revente, rang, curseur)
+  -- Le prix d'un patron à l'HV : celui d'UN patron au dernier scan, l'HV seule (un patron de butin n'a pas de marchand).
+  local function prixPatron(id) return (lib:PrixAchat(id, 1, lignes, {})) end
+  local res = ns.route(ns.recettesDuMetier(base, metier, connues, prixPatron), achat, revente, rang, curseur)
   res.metier = metier
   res.scan = hv and lotHV and lotHV.scan and lotHV.scan.scanned
   res.fournisseur = hv and lotHV and lotHV.fournisseur
