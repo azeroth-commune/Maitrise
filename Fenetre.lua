@@ -38,6 +38,7 @@ local COL_ACHATS = {
 -- quand elle est surtout verte.
 -- ponytail: verticale seulement ; une frise horizontale en option si l'envie vient.
 local ETAPE_H, AXE_X, ICONE = 46, 44, 34
+local TRAIT_L = 8 -- largeur du trait coloré de l'axe (retour de Virgile : plus large, plus lisible)
 local COULEURS = { orange = { 1, 0.5, 0.15 }, jaune = { 1, 0.82, 0 }, vert = { 0.25, 0.8, 0.25 } }
 -- Le détail d'une étape : « de 25 à 85 · 13 à 18 fabrications (15 en moyenne) · incertaine », un nombre simple pour une
 -- étape orange (une fabrication = un point).
@@ -104,9 +105,10 @@ local function cadreEtape(i)
   r:SetPoint("TOPLEFT", 0, -(i - 1) * ETAPE_H)
   r.niveau = r:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   r.niveau:SetPoint("RIGHT", r, "LEFT", AXE_X - 10, 0)
+  -- Un tiret qui part du trait vers l'étape (pas un point coloré sur l'axe : il brouillait les couleurs des recettes).
   r.point = r:CreateTexture(nil, "ARTWORK")
-  r.point:SetSize(10, 10)
-  r.point:SetPoint("CENTER", r, "LEFT", AXE_X, 0)
+  r.point:SetSize(ICONE / 2 - TRAIT_L / 2 + 4, 2)
+  r.point:SetPoint("LEFT", r, "LEFT", AXE_X + TRAIT_L / 2, 0)
   r.traits = {}
   r.icone = CreateFrame("Button", nil, r)
   r.icone:SetSize(ICONE, ICONE)
@@ -138,7 +140,7 @@ local function traitsEtape(r, e)
     local t = r.traits[i]
     if not t then
       t = r:CreateTexture(nil, "ARTWORK", nil, -1) -- sous le rond de l'étape
-      t:SetWidth(4)
+      t:SetWidth(TRAIT_L)
       r.traits[i] = t
     end
     local h = ETAPE_H * (pl.a - pl.de) / n
@@ -176,7 +178,7 @@ local function dessinerFrise()
       r.nom:SetText("Objectif : " .. e.de)
       r.detail:SetText("")
     else
-      r.point:SetColorTexture(0.66, 0.56, 1, 1)
+      r.point:SetColorTexture(0.85, 0.85, 0.85, 0.7)
       r.icone.tex:SetTexture(e.objet and C_Item.GetItemIconByID(e.objet) or iconeSort(e.cle) or "Interface\\Icons\\INV_Misc_QuestionMark")
       r.nom:SetText(e.nom or "?")
       r.detail:SetText(detailEtape(e))
