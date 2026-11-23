@@ -195,7 +195,7 @@ local function dessinerFrise()
   for i, e in ipairs(etapes) do
     local r = cadreEtape(i)
     r.etape = e
-    r.niveau:SetText(e.de)
+    r.niveau:SetText(e.apprendre and "" or e.de) -- une ligne « Apprendre » garde sa place sur l'axe, sans répéter le niveau
     r.icone:SetShown(not e.trou and not e.fin)
     traitsEtape(r, e)
     if e.apprendre then
@@ -242,6 +242,18 @@ local function postes(r)
       lib.ArgentCourt(r.revente), appr),
     ("|cffffd100Total net : %s|r\nJusqu'à %s une fois sur dix"):format(lib.ArgentCourt(r.net), lib.ArgentCourt(r.netUneSurDix))
 end
+-- La frise et le tableau des achats démarrent juste sous la dernière ligne de l'en-tête : sans avertissement, pas de vide
+-- réservé (retour de Virgile, captures du 23/11). haut = hauteur des avertissements écrits (0 sans).
+local function placerContenu(haut)
+  local y = 136 + haut + 8
+  frise.scroll:ClearAllPoints()
+  frise.scroll:SetPoint("TOPLEFT", 14, -y)
+  frise.scroll:SetPoint("BOTTOMRIGHT", -32, 14)
+  if tabAchats.header then
+    tabAchats.header:ClearAllPoints()
+    tabAchats.header:SetPoint("TOPLEFT", 14, -(y + 4))
+  end
+end
 local function ecrireResume()
   if not res then
     resume.titre:SetText("Choisis un métier et jusqu'où le monter, puis Calculer.")
@@ -268,6 +280,7 @@ local function ecrireResume()
     l[#l + 1] = "|cffff9933Aucune recette de source connue de " .. table.concat(t, ", ") .. ".|r"
   end
   resume.avert:SetText(table.concat(l, "\n"))
+  placerContenu(#l > 0 and (resume.avert:GetStringHeight() + 6) or 0)
 end
 local function afficher(r)
   res = r
