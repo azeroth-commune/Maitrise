@@ -29,12 +29,12 @@ assert(Maitrise and Maitrise.Tranche, "le global Maitrise posé")
 
 local M, B, TIGE = 2770, 2840, 2841 -- minerai, barre, tige
 -- Un scénario : recettes de la réserve { clé = { objet, nom, { composant, qté, … }, apprendre, jaune, gris, source, patron,
--- recharge } } (métier « Forge »), paliers de l'HV { [id] = { { prix, qté }, … } }, marchands { [id] = prix }, revente
+-- recharge, condition, objet patron } } (métier « Forge »), paliers de l'HV { [id] = { { prix, qté }, … } }, marchands { [id] = prix }, revente
 -- au marchand { [id] = prix }, compétence actuelle du perso connecté.
 local function scenario(t)
   local r = {}
   for k, x in pairs(t.recettes) do
-    r[k] = { x[1], 1, 1, "Forge", x[2], x[3], x[4], x[5], x[6], x[7] or "maître", "source externe", x[8] or 0, x[9] or 0, x[10] }
+    r[k] = { x[1], 1, 1, "Forge", x[2], x[3], x[4], x[5], x[6], x[7] or "maître", "source externe", x[8] or 0, x[9] or 0, x[10], x[11] }
   end
   acns.recettesClassic = r
   local items = {}
@@ -103,6 +103,30 @@ res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = {
   [8] = { 5008, "Patron", { M, 2 }, 1, 10, 20, "patron vendu", 500 } } })
 assert(#res.fabrications == 1 and res.fabrications[1].nom == "Patron", noms(res))
 assert(res.patrons == 500 and res.total == 9 * 2 * 10 + 500, "patron compté une fois : " .. res.total)
+
+-- Patron à l'HV (Maitrise#15) : une recette « inconnue » dont le patron (7001) est à l'HV est prise, au prix d'UN patron
+-- (palier de 1) ; sans le patron à l'HV, ou sans objet patron, ou avec une condition, elle est écartée. Un patron vendu moins cher
+-- à l'HV que chez le marchand prend le prix de l'HV, plus cher il garde celui du marchand.
+local RH = { [1] = { 5001, "Lame", { M, 4 }, 1, 10, 20 }, [9] = { 5009, "Butin", { M, 1 }, 1, 10, 20, "inconnue", nil, nil, nil, 7001 } }
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RH })
+assert(res.fabrications[1].nom == "Lame" and not res.fabrications[1].patronHV, "patron pas à l'HV : écartée : " .. noms(res))
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RH, hv = { [7001] = { { 100, 1 }, { 900, 1 } } } })
+assert(res.fabrications[1].nom == "Butin" and res.fabrications[1].patronHV and res.fabrications[1].patron == 100
+  and res.patrons == 100 and res.total == 9 * 10 + 100, "patron à l'HV compté (un seul, premier palier) : " .. res.total .. " " .. noms(res))
+RH[9][11] = nil
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RH, hv = { [7001] = { { 100, 1 } } } })
+assert(res.fabrications[1].nom == "Lame", "sans objet patron : écartée : " .. noms(res))
+RH[9][11], RH[9][10] = 7001, "réputation : Aube d'argent"
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RH, hv = { [7001] = { { 100, 1 } } } })
+assert(res.fabrications[1].nom == "Lame", "patron à l'HV mais condition : écartée : " .. noms(res))
+local RV = { [1] = { 5001, "Lame", { M, 8 }, 1, 10, 20 }, [9] = { 5009, "Vendu", { M, 1 }, 1, 10, 20, "patron vendu", 500, nil, nil, 7001 } }
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RV, hv = { [7001] = { { 100, 1 } } } })
+assert(res.fabrications[1].patronHV and res.patrons == 100, "patron vendu moins cher à l'HV : prix de l'HV : " .. noms(res))
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RV, hv = { [7001] = { { 800, 1 } } } })
+assert(not res.fabrications[1].patronHV and res.patrons == 500, "patron vendu plus cher à l'HV : prix du marchand : " .. noms(res))
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RV })
+assert(res.patrons == 500 and not res.fabrications[1].patronHV, "patron vendu, pas à l'HV : prix du marchand : " .. noms(res))
+print("Maîtrise : patron à l'HV OK")
 
 -- Un trou : aucune recette ne donne de point de 20 à 25.
 res = scenario({ rang = 1, curseur = 25, marchands = { [M] = 10 }, recettes = {
