@@ -173,25 +173,7 @@ local function traitsEtape(r, e)
 end
 
 local function dessinerFrise()
-  local etapes = {}
-  if res then
-    for _, f in ipairs(res.fabrications) do etapes[#etapes + 1] = f end
-    for _, t in ipairs(res.trous) do etapes[#etapes + 1] = { de = t.de, a = t.a, trou = true } end
-    -- Les apprentissages à leur niveau, avant l'étape qui les demande (même niveau : l'apprentissage d'abord).
-    for _, a in ipairs(res.apprentissages) do
-      local l = {}
-      for k, v in pairs(a) do l[k] = v end
-      l.de, l.apprendre = a.niveau, true
-      etapes[#etapes + 1] = l
-    end
-    for i, e in ipairs(etapes) do e.ordre = i end
-    table.sort(etapes, function(x, y)
-      if x.de ~= y.de then return x.de < y.de end
-      if (x.apprendre or false) ~= (y.apprendre or false) then return x.apprendre or false end
-      return x.ordre < y.ordre
-    end)
-    etapes[#etapes + 1] = { de = res.a, fin = true }
-  end
+  local etapes = res and ns.etapesFrise(res) or {}
   for i, e in ipairs(etapes) do
     local r = cadreEtape(i)
     r.etape = e
