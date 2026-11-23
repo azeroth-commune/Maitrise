@@ -7,9 +7,13 @@
 local _, ns = ...
 local lib = AzerothCommune
 -- Ce que Maîtrise lit : le socle ne relève que les types auxquels un add-on a souscrit.
-for _, t in ipairs({ "base des recettes", "métiers et compétences", "cours de l'HV", "marchands", "objets" }) do lib:Souscrire(t) end
+-- « maîtres de métier » : la compétence demandée et le prix de chaque recette chez un maître (relevé direct, AzerothCommune#68).
+for _, t in ipairs({ "base des recettes", "métiers et compétences", "cours de l'HV", "marchands", "objets", "maîtres de métier" }) do lib:Souscrire(t) end
 
 local ITERATIONS, DEPART2, PROFONDEUR = 40, 21, 3
+-- Le temps compte aussi : un point à moins de 20 % de chance n'est pas compté pour une recette, sauf si aucune autre ne
+-- le couvre (mieux la moins mauvaise qu'un trou).
+local SEUIL = 0.2
 
 -- Les recettes d'un métier que la route peut prendre : une source connue (d'emblée, maître, patron vendu ; « inconnue »
 -- couvre aussi les patrons sous réputation, de l'autre faction ou vendus en donjon, règle du générateur de la réserve),
@@ -32,6 +36,43 @@ local function chance(r, s)
   if s < r.learn or s >= r.g then return 0 end
   if r.y == 0 or s < r.y then return 1 end
   return (r.g - s) / (r.g - r.y)
+end
+
+-- Couleur de la recette à la compétence s (seuils du client) : orange sous le jaune, jaune jusqu'au milieu entre jaune et
+-- gris, vert ensuite (la chance y passe à 50 %).
+local function couleur(r, s)
+  if r.y == 0 or s < r.y then return "orange" end
+  return s < (r.y + r.g) / 2 and "jaune" or "vert"
+end
+
+-- La fourchette d'une étape (le 10e et le 90e centile de ses fabrications) d'après la chance ps de chacun de ses points,
+-- sans tirage : un point demande un nombre géométrique de fabrications (moyenne 1 / p, variance (1 − p) / p², 3e moment
+-- centré (1 − p)(2 − p) / p³) ; on les additionne (cumulants) et on lit les centiles par Wilson-Hilferty (loi gamma de
+-- mêmes moments), arrondis au plus près, jamais sous le nombre de points. Mesuré contre la convolution exacte (relecture
+-- de la PR #14) : à une fabrication près quand tous les points sont à 20 % ou plus, à deux près avec des points de repli
+-- sous 20 % (étapes de 100 à 200 fabrications). Rend bas, haut ; nil pour une étape sans aléa (que des points à 100 %).
+-- ponytail: approximation (la convolution exacte coûte ~100x plus) ; l'asymétrie des étapes de 1 à 2 points reste à ±1.
+local Z = 1.2815515655 -- le 90e centile de la loi normale
+function ns.fourchette(ps)
+  local m, v, k3, aleas = 0, 0, 0, false
+  for _, p in ipairs(ps) do
+    m = m + 1 / p
+    if p < 1 then
+      aleas = true
+      v = v + (1 - p) / (p * p)
+      k3 = k3 + (1 - p) * (2 - p) / (p * p * p)
+    end
+  end
+  if not aleas then return nil end
+  local sd, g = math.sqrt(v), k3 / v ^ 1.5
+  -- Wilson-Hilferty : une loi gamma décalée de même moyenne, variance et asymétrie (k = 4 / g²), tenue même pour un
+  -- étage très asymétrique (quelques points à 3 %) où Cornish-Fisher décroche.
+  local k = 4 / (g * g)
+  local function centile(z)
+    local u = 1 - 1 / (9 * k) + z / (3 * math.sqrt(k))
+    return math.floor(m - 2 * sd / g + (2 * sd / g) * u * u * u + 0.5)
+  end
+  return math.max(#ps, centile(-Z)), math.max(#ps, centile(Z))
 end
 
 -- La route de FROM à TO avec les recettes rs (ns.recettesDuMetier) et les prix : achat(id, qty) → coût de qty unités
@@ -81,7 +122,7 @@ function ns.route(rs, achat, revente, FROM, TO)
     marg, memo = {}, {}
     local steps = {}
     for s = FROM, TO - 1 do
-      local best, bk
+      local best, bk, repli, rk -- repli : le meilleur parmi les recettes sous SEUIL, si aucune autre ne couvre le point
       for _, r in ipairs(rs) do
         local p = chance(r, s)
         if p > 0 then
@@ -95,11 +136,13 @@ function ns.route(rs, achat, revente, FROM, TO)
             local v = 0
             if r.o then v = ((need[r.o] or 0) > 0 and (unit(r.o, s, 1) or 0) or revente(r.o)) * r.n end
             local k = (c - v) / p
-            if not bk or k < bk then best, bk = { r = r, crafts = 1 / p }, k end
+            if p < SEUIL then
+              if not rk or k < rk then repli, rk = { r = r, crafts = 1 / p }, k end
+            elseif not bk or k < bk then best, bk = { r = r, crafts = 1 / p }, k end
           end
         end
       end
-      steps[s] = best
+      steps[s] = best or repli
     end
     -- Le flux : ce que la route consomme, ce qu'elle produit, puis fabriquer ou acheter le reste.
     local req, made = {}, {}
@@ -165,15 +208,29 @@ function ns.route(rs, achat, revente, FROM, TO)
     local b = bestPlan.steps[s]
     if b then
       local last = fab[#fab]
-      if last and last.cle == b.r.key and last.a == s then last.a, last.fois = s + 1, last.fois + b.crafts
-      else fab[#fab + 1] = { de = s, a = s + 1, cle = b.r.key, nom = b.r.name, fois = b.crafts, patron = b.r.pattern, objet = b.r.o,
-        n = b.r.n, composants = b.r.reag } end
+      if not (last and last.cle == b.r.key and last.a == s) then
+        last = { de = s, a = s, cle = b.r.key, nom = b.r.name, fois = 0, patron = b.r.pattern, objet = b.r.o,
+          n = b.r.n, composants = b.r.reag, plages = {}, chances = {} }
+        fab[#fab + 1] = last
+      end
+      last.a, last.fois = s + 1, last.fois + b.crafts
+      last.chances[#last.chances + 1] = 1 / b.crafts
+      local c, pl = couleur(b.r, s), last.plages
+      if #pl > 0 and pl[#pl].couleur == c then pl[#pl].a = s + 1 else pl[#pl + 1] = { de = s, a = s + 1, couleur = c } end
     else
       local last = trous[#trous]
       if last and last.a == s then last.a = s + 1 else trous[#trous + 1] = { de = s, a = s + 1 } end
     end
   end
-  for _, f in ipairs(fab) do f.fois = math.ceil(f.fois - 1e-9) end
+  for _, f in ipairs(fab) do
+    local verts = 0
+    for _, pl in ipairs(f.plages) do if pl.couleur == "vert" then verts = verts + pl.a - pl.de end end
+    local bas, haut = ns.fourchette(f.chances)
+    f.fourchette = bas and { bas = bas, haut = haut } or nil
+    f.incertaine = verts * 2 > f.a - f.de
+    f.chances = nil
+    f.fois = math.ceil(f.fois - 1e-9)
+  end
   table.sort(bestPlan.list, function(a, b) return (a.cout or 0) > (b.cout or 0) end)
   local sp = {}
   for i in pairs(sansPrix) do sp[#sp + 1] = i end
@@ -194,7 +251,9 @@ end
 
 -- La tranche (personnage, métier, curseur) : la route du niveau actuel au curseur, aux prix du moment (socle). Rend
 -- { de, a, fabrications = { { de, a, cle (le sort de la recette), nom, fois, patron, objet (nil : enchantement), n (produits
--- par fabrication), composants = { { id, qty } } } }, achats = { { id, qty, cout } }, totalAchats, patrons,
+-- par fabrication), composants = { { id, qty } }, plages = { { de, a, couleur (« orange », « jaune », « vert ») } }, fourchette
+-- (le 10e et le 90e centile des fabrications : { bas =, haut = }, nil pour une étape orange), incertaine (plus de la moitié
+-- des points en vert) } }, achats = { { id, qty, cout } }, totalAchats, patrons,
 -- total, revente, trous = { { de, a } }, sansPrix = { id… }, incomplet, scan (date lisible du dernier scan de l'HV, nil
 -- sans), sansHV (aucun cours de l'HV : marchands seuls) }, ou nil et la raison.
 -- ponytail: le stock n'entre pas dans la route (tout acheté) ; Composants le déduit dans les Besoins du projet de

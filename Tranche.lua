@@ -1,8 +1,8 @@
 -- Maîtrise, la tranche tenue (Maitrise#3) : une tranche en cours est un projet de Composants qu'elle tient (lignes
--- fabrication, raison « Maîtrise : <métier> de X à Y »). Ici : le stockage, créer, recalculer, finir, l'avance ou le
--- retard sur la route, le décompte des fabrications. Pas de fenêtre : testable seule (check.lua).
+-- fabrication, raison « Maîtrise : <métier> de X à Y »). Ici : le stockage, créer, recalculer, finir, la progression
+-- (compétence / curseur : rien d'autre, ni avance ni décompte des fabrications). Pas de fenêtre : testable seule (check.lua).
 -- MaitriseDB.tranches[guid][métier] = { projet (identité Composants), de (compétence à la création ou au dernier calcul),
--- a (le curseur), faites (fabrications comptées depuis), etapes = { { de, a, cle, fois } } (la route gardée) }.
+-- a (le curseur) } ; une tranche gardée par une version plus ancienne porte encore faites et etapes, ignorés.
 -- Au plus une par personnage et par métier. Rien ne se recalcule seul (pas d'état deviné) : seul un clic le fait.
 local _, ns = ...
 
@@ -36,14 +36,12 @@ end
 
 -- Tient le projet p avec la route res, au curseur : met la tranche (GUID du connecté) à jour. Rend la tranche.
 local function tenir(p, metier, res, curseur)
-  local etapes = {}
-  for _, f in ipairs(res.fabrications) do etapes[#etapes + 1] = { de = f.de, a = f.a, cle = f.cle, fois = f.fois } end
   -- Le nom du projet porte les niveaux, comme sa raison (liste « Projets » de Composants), et les suit au recalcul.
   Composants.Renommer(p, raison(metier, res.de, curseur))
   Composants.Tenir(p, raison(metier, res.de, curseur), lignes(res))
   local g = UnitGUID("player")
   db().tranches[g] = db().tranches[g] or {}
-  local t = { projet = p.id, de = res.de, a = curseur, faites = 0, etapes = etapes }
+  local t = { projet = p.id, de = res.de, a = curseur }
   db().tranches[g][metier] = t
   return t
 end
@@ -84,18 +82,7 @@ function ns.trancheAbandonner(metier)
   db().tranches[UnitGUID("player")][metier] = nil
 end
 
--- Fabrications que la route gardée prévoyait pour atteindre la compétence s : les étapes finies en entier, plus la part
--- proportionnelle de celle où l'on est.
-local function prevues(t, s)
-  local n = 0
-  for _, e in ipairs(t.etapes) do
-    if e.a <= s then n = n + e.fois
-    elseif e.de < s then n = n + e.fois * (s - e.de) / (e.a - e.de) end
-  end
-  return n
-end
-
--- L'état de la tranche : { tranche, rang, a, ecart (prévues − faites, arrondi : > 0 en avance), texte }, ou nil sans tranche.
+-- L'état de la tranche : { tranche, rang, a, texte « <métier> <compétence> / <curseur> » }, ou nil sans tranche.
 -- Lit la compétence par le socle seulement ; au curseur atteint, la tranche se termine (projet lâché, une ligne au chat)
 -- et on rend nil.
 -- ponytail: le socle relit les métiers toutes les 60 s et ne le signale pas : la fin peut se voir avec une minute de retard.
@@ -110,26 +97,5 @@ function ns.trancheEtat(metier)
     print(("|cffffd100Maîtrise :|r tranche %s terminée (%d)."):format(metier, t.a))
     return nil
   end
-  -- Moins de fabrications que prévu pour la compétence atteinte : en avance (les points sont venus plus vite).
-  local ecart = math.floor(prevues(t, rang) - t.faites + 0.5)
-  local suite = ecart > 0 and ("en avance (%d)"):format(ecart) or ecart < 0 and ("en retard (%d)"):format(-ecart) or "dans les temps"
-  return { tranche = t, rang = rang, a = t.a, ecart = ecart, texte = ("%s %d / %d · %s"):format(metier, rang, t.a, suite) }
+  return { tranche = t, rang = rang, a = t.a, texte = ("%s %d / %d"):format(metier, rang, t.a) }
 end
-
--- Une fabrication réussie du joueur : si son sort est une recette d'une tranche, elle compte (déterministe).
-function ns.trancheCompter(spellID)
-  local touche
-  for metier, t in pairs(db().tranches[UnitGUID("player")] or {}) do
-    for _, e in ipairs(t.etapes) do
-      if e.cle == spellID then t.faites = t.faites + 1; touche = metier break end
-    end
-  end
-  if touche then
-    ns.trancheEtat(touche)
-    if ns.majBouton then ns.majBouton() end
-  end
-end
-
-local ev = CreateFrame("Frame")
-ev:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
-ev:SetScript("OnEvent", function(_, _, unit, _, spellID) if unit == "player" then ns.trancheCompter(spellID) end end)

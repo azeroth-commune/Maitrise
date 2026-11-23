@@ -85,8 +85,9 @@ test("Maîtrise : le menu des métiers affiche le métier choisi", function()
     MaitriseFrame:Hide()
 end)
 
--- La tranche tenue (Maitrise#3) : créer depuis la fenêtre, recalculer d'un clic en gardant les choix, finir au curseur.
-test("Maîtrise : la tranche devient un projet tenu, se recalcule et se termine", function()
+-- La tranche tenue (Maitrise#3) : créer depuis la fenêtre, Calculer sans toucher au projet, mettre le projet à jour en
+-- gardant les choix, finir au curseur.
+test("Maîtrise : la tranche devient un projet tenu, se met à jour et se termine", function()
     local guid = UnitGUID("player")
     local function rang(r) AzerothCommuneDB.chars[guid].professions = { { name = "Forge", rank = r, max = 75 } } end
     rang(1)
@@ -115,18 +116,23 @@ test("Maîtrise : la tranche devient un projet tenu, se recalcule et se termine"
     assertEquals(projet, ComposantsDB.projets[ComposantsDB.courant], "sur ce projet")
     ComposantsFrame:Hide()
     assertTrue(#projet.lines > 0 and projet.lines[1].recette ~= nil and projet.lines[1].fois >= 1, "lignes fabrication")
-    assertEquals(0, #enfants(MaitriseFrame, function(c) return c:GetObjectType() == "Button" and c.GetText and c:GetText() == "En faire un projet" end), "le bouton montre l'état")
-    -- L'état sur le bouton : compétence sur le curseur, avance ou retard (au départ, dans les temps).
-    local etat
-    for _, c in ipairs(enfants(MaitriseFrame, function(c) return c:GetObjectType() == "Button" and c.GetText end)) do
-        if (c:GetText() or ""):find("Forge 1 / 30", 1, true) then etat = c end
-    end
-    assertNotNil(etat, "bouton d'état « Forge 1 / 30 »")
-    assertTrue(etat:GetText():find("dans les temps", 1, true) ~= nil, etat:GetText())
-    -- Un choix de case, puis le clic recalcule depuis la compétence réelle : le choix reste, la raison suit.
+    -- Avec une tranche : le bouton enregistre la route affichée (« Mettre à jour le projet ») ; la progression est dans le
+    -- titre de la fenêtre, plus sur un bouton.
+    local maj = assert(bouton("Mettre à jour le projet"), "le bouton du projet")
+    assertNil(bouton("En faire un projet"))
+    assertEquals("Maîtrise · tranche Forge 1 / 30", MaitriseFrame.title:GetText(), "la progression dans le titre")
+    -- Calculer ne touche jamais au projet : un autre curseur, calculé, ne change pas la tranche.
+    curseur:SetText("20")
+    bouton("Calculer"):Click()
+    assertEquals("Maîtrise : Forge de 1 à 30", projet.tenu, "Calculer ne touche pas au projet")
+    -- Un choix de case, la compétence monte, Calculer puis Mettre à jour : le même projet prend la nouvelle route, le
+    -- choix reste, le nom et la raison suivent.
     Composants.Choix(projet, 2840, "acheter")
     rang(11)
-    etat:Click()
+    curseur:SetText("30")
+    bouton("Calculer"):Click()
+    maj:Click()
+    if ComposantsFrame then ComposantsFrame:Hide() end
     assertEquals("acheter", projet.choix[2840], "choix de case gardé")
     assertEquals("Maîtrise : Forge de 11 à 30", projet.tenu)
     assertEquals("Maîtrise : Forge de 11 à 30", projet.name, "le nom suit les niveaux")
@@ -140,4 +146,40 @@ test("Maîtrise : la tranche devient un projet tenu, se recalcule et se termine"
     assertNil(MaitriseDB.tranches[guid].Forge, "tranche oubliée")
     MaitriseFrame:Hide()
     if ComposantsFrame then ComposantsFrame:Hide() end
+end)
+
+-- La frise colorée et ses fourchettes (Maitrise#11) : un trait par plage de couleur, la fourchette écrite pour une étape
+-- jaune ou verte, « incertaine » pour une étape surtout verte.
+test("Maîtrise : la frise colore l'axe et écrit les fourchettes", function()
+    local guid = UnitGUID("player")
+    AzerothCommuneDB.chars[guid].professions = { { name = "Forge", rank = 1, max = 300 } }
+    AzerothCommuneMarket[AzerothCommune.MaisonHV()] = { scanned = "22/11 21:00", time = time(), items = {
+        [2840] = { tiers = { { price = 40, qty = 2000 } } }, [2835] = { tiers = { { price = 10, qty = 2000 } } } } }
+    MaitriseDB = nil
+    SlashCmdList.MAITRISE("")
+    local dd = enfants(MaitriseFrame, function(c) return c.GenerateMenu and c.GetMenuDescription end)[1]
+    dd:GenerateMenu()
+    for _, e in dd:GetMenuDescription():EnumerateElementDescriptions() do
+        if MenuUtil.GetElementText(e) == "Forge (1)" then dd:Pick(e, MenuInputContext.MouseButton, "LeftButton") end
+    end
+    enfants(MaitriseFrame, function(c) return c:GetObjectType() == "EditBox" end)[1]:SetText("150")
+    bouton("Calculer"):Click()
+    local vues, orange, fourchette, incertaine, traits = etapes(), 0, 0, 0, 0
+    for _, r in ipairs(vues) do
+        local e = r.etape
+        if e.plages then
+            for i = 1, #e.plages do assertTrue(r.traits[i]:IsShown(), "un trait par plage de couleur") traits = traits + 1 end
+            local d = r.detail:GetText()
+            if e.fourchette and e.fourchette.bas < e.fourchette.haut then -- réduite à un nombre : écrite comme un nombre simple
+                fourchette = fourchette + 1
+                assertTrue(d:find(("%d à %d fabrications (%d en moyenne)"):format(e.fourchette.bas, e.fourchette.haut, e.fois), 1, true) ~= nil, d)
+            else
+                orange = orange + 1
+                assertTrue(d:find("à %d+ fabrications") == nil and d:find("moyenne", 1, true) == nil, "orange : un nombre simple : " .. d)
+            end
+            if e.incertaine then incertaine = incertaine + 1; assertTrue(d:find("incertaine", 1, true) ~= nil, d) end
+        end
+    end
+    assertTrue(traits > 0 and fourchette > 0 and incertaine > 0, "des traits colorés, des fourchettes et une étape incertaine sur 1 → 150")
+    MaitriseFrame:Hide()
 end)

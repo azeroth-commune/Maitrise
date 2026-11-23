@@ -120,7 +120,58 @@ pas, pourquoi = Maitrise.Tranche(nil, "Couture", 100)
 assert(pas == nil and pourquoi:find("pas relevé", 1, true), tostring(pourquoi))
 print("Maîtrise : tranche (moins chère, revente, fabriquer, réemploi, paliers, exclusions, trous, sans prix) OK")
 
--- La tranche tenue (Maitrise#3) : créer, une seule par perso et métier, avance ou retard, recalculer, finir.
+-- Règle des 20 % (Maitrise#9) : Gros (7 minerais, jaune dès 20, gris à 40) et Fin (1 minerai, jaune dès 10, gris à 30).
+-- À 28, Fin ne donne qu'un point sur 10 (10 minerais le point) contre 0,6 pour Gros (11,7 le point) : sans la règle, Fin
+-- gagne ; avec, Gros couvre le point. Sans Gros, Fin reste (pas de trou).
+local R20 = { [1] = { 5001, "Fin", { M, 1 }, 1, 10, 30 }, [2] = { 5002, "Gros", { M, 7 }, 1, 20, 40 } }
+res = scenario({ rang = 28, curseur = 29, marchands = { [M] = 10 }, recettes = R20 })
+assert(#res.fabrications == 1 and res.fabrications[1].nom == "Gros", "point sous 20 % évité : " .. noms(res))
+res = scenario({ rang = 28, curseur = 29, marchands = { [M] = 10 }, recettes = { [1] = R20[1] } })
+assert(#res.fabrications == 1 and res.fabrications[1].nom == "Fin" and #res.trous == 0, "seule recette gardée : " .. noms(res))
+-- Un point à 20 % tout juste reste à la moins chère : à 26, Fin donne 0,2 (5 minerais le point) contre 0,7 pour Gros (10).
+res = scenario({ rang = 26, curseur = 27, marchands = { [M] = 10 }, recettes = R20 })
+assert(res.fabrications[1].nom == "Fin", "à 20 % la règle ne joue pas : " .. noms(res))
+print("Maîtrise : règle des 20 % (évité si une autre recette couvre, gardé sinon) OK")
+
+-- Plages de couleur et fourchettes (Maitrise#11), seuils du client : orange sous le jaune, vert au milieu jaune/gris.
+-- « Orange » 1-10-20 → 10 orange ; « Longue » (jaune 10, gris 50) : de 10 à 30 jaune, de 30 à 50 vert.
+local function etape(r, nom) for _, f in ipairs(r.fabrications) do if f.nom == nom then return f end end end
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Orange", { M, 1 }, 1, 10, 20 } } })
+local o = res.fabrications[1]
+assert(o.fourchette == nil and not o.incertaine, "étape orange : pas de fourchette")
+assert(#o.plages == 1 and o.plages[1].couleur == "orange" and o.plages[1].de == 1 and o.plages[1].a == 10)
+local LONGUE = { [1] = { 5001, "Longue", { M, 1 }, 1, 10, 50 } }
+res = scenario({ rang = 5, curseur = 50, marchands = { [M] = 10 }, recettes = LONGUE })
+local l = etape(res, "Longue")
+local pl = l.plages
+assert(#pl == 3 and pl[1].couleur == "orange" and pl[1].a == 10 and pl[2].couleur == "jaune" and pl[2].a == 30
+  and pl[3].couleur == "vert" and pl[3].de == 30 and pl[3].a == 50, "plages : orange, jaune, vert (30 = milieu)")
+assert(l.fourchette and l.fourchette.bas <= l.fois and l.fois <= l.fourchette.haut, "la fourchette encadre la moyenne")
+-- Surtout vert : incertaine, plus large qu'une étape jaune de même longueur (20 points).
+res = scenario({ rang = 30, curseur = 50, marchands = { [M] = 10 }, recettes = LONGUE })
+local vert = etape(res, "Longue")
+assert(vert.incertaine and #vert.plages == 1 and vert.plages[1].couleur == "vert", "étape verte incertaine")
+res = scenario({ rang = 10, curseur = 30, marchands = { [M] = 10 }, recettes = LONGUE })
+local jaune = etape(res, "Longue")
+assert(not jaune.incertaine and jaune.plages[1].couleur == "jaune", "étape jaune sûre")
+assert(vert.fourchette.haut - vert.fourchette.bas > jaune.fourchette.haut - jaune.fourchette.bas, "le vert est plus large")
+-- Contre la convolution exacte des lois géométriques (la sonde research/montee/variance.lua tire au sort, 10 000 fois) :
+-- à une fabrication près, ici 20 points verts (de 50 % à 10 %).
+local ps = {}
+for s = 30, 49 do ps[#ps + 1] = (50 - s) / 40 end
+local bas, haut = ns.fourchette(ps)
+local d = { [0] = 1 }
+for _, p in ipairs(ps) do
+  local nd = {}
+  for k, v in pairs(d) do local w = p for j = 1, 600 do nd[k + j] = (nd[k + j] or 0) + v * w; w = w * (1 - p); if w < 1e-12 then break end end end
+  d = nd
+end
+local c, eb, eh = 0
+for k = 0, 1000 do c = c + (d[k] or 0); if not eb and c >= 0.1 then eb = k end; if not eh and c >= 0.9 then eh = k end end
+assert(math.abs(bas - eb) <= 1 and math.abs(haut - eh) <= 1, ("fourchette %d-%d, exacte %d-%d"):format(bas, haut, eb, eh))
+print("Maîtrise : plages de couleur et fourchettes OK")
+
+-- La tranche tenue (Maitrise#3) : créer, une seule par perso et métier, progression, recalculer, finir.
 local function rang(r) AzerothCommuneDB.chars[MOI].professions[1].rank = r end
 res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Lame", { M, 2 }, 1, 10, 20 } } })
 local t = assert(ns.trancheCreer("Forge", res))
@@ -131,20 +182,18 @@ assert(ns.trancheCreer("Forge", res))
 local _, p2 = ns.trancheDe("Forge")
 assert(p2 == p and #Composants.Projets() == 1, "au plus une tranche par perso et métier : le projet est repris")
 assert(select(2, ns.trancheDe("Forge")) == p and ns.trancheDe("Couture") == nil)
--- Avance ou retard : à 5, la route prévoyait 4 des 9 fabrications ; aucune faite = en avance.
+-- La progression : « <métier> <compétence> / <curseur> », rien d'autre (ni avance, ni retard, ni décompte).
 rang(5)
-assert(ns.trancheEtat("Forge").texte == "Forge 5 / 10 · en avance (4)", ns.trancheEtat("Forge").texte)
-ns.trancheCompter(999) -- pas une recette de la tranche
-assert(t.faites == 0, "un autre sort ne compte pas")
-for i = 1, 4 do ns.trancheCompter(1) end
-assert(ns.trancheEtat("Forge").texte == "Forge 5 / 10 · dans les temps")
-ns.trancheCompter(1)
-assert(ns.trancheEtat("Forge").texte == "Forge 5 / 10 · en retard (1)", ns.trancheEtat("Forge").texte)
--- Recalculer : depuis 5 au même curseur, les choix de case restent, le décompte repart.
+assert(ns.trancheEtat("Forge").texte == "Forge 5 / 10", ns.trancheEtat("Forge").texte)
+assert(ns.trancheCompter == nil and t.faites == nil and t.etapes == nil, "plus de décompte des fabrications")
+-- Une tranche gardée par une version plus ancienne (faites, etapes) se lit sans erreur.
+t.faites, t.etapes = 3, { { de = 1, a = 10, cle = 1, fois = 9 } }
+assert(ns.trancheEtat("Forge").texte == "Forge 5 / 10")
+-- Recalculer : depuis 5 au même curseur, les choix de case restent.
 Composants.Choix(p, M, "acheter")
 local r2 = assert(ns.trancheRecalculer("Forge"))
 assert(r2.de == 5 and r2.a == 10 and p.lines[1].fois == 5 and p.choix[M] == "acheter", "recalcul : lignes neuves, choix gardés")
-assert(t ~= ns.trancheDe("Forge") and ns.trancheDe("Forge").faites == 0 and ns.trancheDe("Forge").de == 5)
+assert(t ~= ns.trancheDe("Forge") and ns.trancheDe("Forge").faites == nil and ns.trancheDe("Forge").de == 5)
 assert(p.tenu == "Maîtrise : Forge de 5 à 10", p.tenu)
 -- Reprendre plus haut : même projet, nouveau curseur.
 assert(ns.trancheRecalculer("Forge", 8) and p.tenu == "Maîtrise : Forge de 5 à 8" and p.name == p.tenu, "le nom suit les niveaux")
@@ -166,4 +215,4 @@ assert(ns.trancheCreer("Forge", res))
 local _, p3 = ns.trancheDe("Forge")
 Composants.Supprimer(p3.id)
 assert(ns.trancheDe("Forge") == nil, "projet supprimé : tranche oubliée")
-print("Maîtrise : tranche tenue (créer, une par métier, avance/retard, recalcul garde les choix, fin, abandon) OK")
+print("Maîtrise : tranche tenue (créer, une par métier, progression, recalcul garde les choix, fin, abandon) OK")
