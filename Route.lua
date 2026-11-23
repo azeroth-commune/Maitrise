@@ -8,7 +8,9 @@ local _, ns = ...
 local lib = AzerothCommune
 -- Ce que Maîtrise lit : le socle ne relève que les types auxquels un add-on a souscrit.
 -- « maîtres de métier » : la compétence demandée et le prix de chaque recette chez un maître (relevé direct, AzerothCommune#68).
-for _, t in ipairs({ "base des recettes", "métiers et compétences", "cours de l'HV", "marchands", "objets", "maîtres de métier" }) do lib:Souscrire(t) end
+-- « recettes connues » : une recette à condition (spécialisation, réputation) n'est prise que si le personnage la connaît.
+for _, t in ipairs({ "base des recettes", "métiers et compétences", "cours de l'HV", "marchands", "objets", "maîtres de métier",
+  "recettes connues" }) do lib:Souscrire(t) end
 
 local ITERATIONS, DEPART2, PROFONDEUR = 40, 21, 3
 -- Le temps compte aussi : un point à moins de 20 % de chance n'est pas compté pour une recette, sauf si aucune autre ne
@@ -17,14 +19,21 @@ local SEUIL = 0.2
 
 -- Les recettes d'un métier que la route peut prendre : une source connue (d'emblée, maître, patron vendu ; « inconnue »
 -- couvre aussi les patrons sous réputation, de l'autre faction ou vendus en donjon, règle du générateur de la réserve),
--- sans temps de recharge, avec les seuils du client (jaune, gris). Triées par clé : un calcul se rejoue à l'identique.
+-- sans temps de recharge, avec les seuils du client (jaune, gris), et sans condition d'accès (spécialisation, réputation,
+-- plus enseignée : AzerothCommune#67) sauf si le personnage la connaît déjà (connues = { [clé] = true }). Le prix pour
+-- l'apprendre : celui du maître relevé pour une recette de maître (AzerothCommune#72), sinon celui du patron. Triées par
+-- clé : un calcul se rejoue à l'identique.
+-- ponytail: le socle ne relève pas la spécialisation ni les réputations du personnage ; toute recette à condition qu'il ne
+-- connaît pas est écartée (prudent : jamais de recette inaccessible proposée).
 local SOURCES = { ["d'emblée"] = true, ["maître"] = true, ["patron vendu"] = true }
-function ns.recettesDuMetier(base, metier)
+function ns.recettesDuMetier(base, metier, connues)
   local out = {}
   for k, r in pairs(base) do
-    if r.profession == metier and SOURCES[r.source] and (r.cooldown or 0) == 0 and r.yellow and r.grey and r.grey > 1 then
+    if r.profession == metier and SOURCES[r.source] and (r.cooldown or 0) == 0 and r.yellow and r.grey and r.grey > 1
+      and (not r.condition or (connues and connues[k])) then
+      local prix = (r.source == "maître" and r.prix_maitre) or r.pattern_price or 0
       out[#out + 1] = { key = k, name = r.name, learn = r.level or 1, y = r.yellow, g = r.grey, o = r.output,
-        n = math.max(1, r.made_min or 1), reag = r.reagents or {}, pattern = r.pattern_price or 0 }
+        n = math.max(1, r.made_min or 1), reag = r.reagents or {}, pattern = prix }
     end
   end
   table.sort(out, function(a, b) return a.key < b.key end)
@@ -83,6 +92,18 @@ function ns.route(rs, achat, revente, FROM, TO)
   for _, r in ipairs(rs) do if r.o then makers[r.o] = makers[r.o] or {}; table.insert(makers[r.o], r) end end
   local allUses = {}
   for _, r in ipairs(rs) do for _, rq in ipairs(r.reag) do allUses[rq.id] = 1 end end
+  -- Le prix pour apprendre une recette (maître ou patron) compte dans le choix point par point, réparti sur les points où
+  -- elle peut servir dans la tranche (chance d'au moins 20 %) : sinon un patron cher pour quelques points passait devant
+  -- une recette sans prix pour une économie de quelques pièces (le total, lui, le comptait déjà une fois).
+  -- ponytail: répartition sur toute la plage utile ; la route peut n'en prendre qu'une partie (le total reste exact).
+  local apprendre = {}
+  for _, r in ipairs(rs) do
+    if (r.pattern or 0) > 0 then
+      local n = 0
+      for s = FROM, TO - 1 do if chance(r, s) >= SEUIL then n = n + 1 end end
+      apprendre[r] = r.pattern / math.max(1, n)
+    end
+  end
   local P, need = {}, {} -- achats et besoins de l'itération précédente
   local marg, memo, sansPrix = {}, {}, {}
   local function marginal(i) -- prix de la prochaine unité, après les P[i] déjà prévues
@@ -135,7 +156,7 @@ function ns.route(rs, achat, revente, FROM, TO)
           if c then
             local v = 0
             if r.o then v = ((need[r.o] or 0) > 0 and (unit(r.o, s, 1) or 0) or revente(r.o)) * r.n end
-            local k = (c - v) / p
+            local k = (c - v) / p + (apprendre[r] or 0)
             if p < SEUIL then
               if not rk or k < rk then repli, rk = { r = r, crafts = 1 / p }, k end
             elseif not bk or k < bk then best, bk = { r = r, crafts = 1 / p }, k end
@@ -279,7 +300,11 @@ function ns.tranche(guid, metier, curseur)
     return (lib:PrixAchat(id, qty, lignes, marchands))
   end
   local function revente(id) local o = objets[id]; return o and o.price or 0 end
-  local res = ns.route(ns.recettesDuMetier(base, metier), achat, revente, rang, curseur)
+  -- Les recettes que ce personnage connaît déjà dans ce métier (relevé du socle) : une recette à condition y est permise.
+  local rc = lib:Lire("recettes connues", guid)
+  local _, metiersPerso = next(rc and rc.persos or {})
+  local connues = metiersPerso and metiersPerso[metier] and metiersPerso[metier].known
+  local res = ns.route(ns.recettesDuMetier(base, metier, connues), achat, revente, rang, curseur)
   res.metier = metier
   res.scan = hv and lotHV and lotHV.scan and lotHV.scan.scanned
   res.fournisseur = hv and lotHV and lotHV.fournisseur

@@ -34,7 +34,7 @@ local M, B, TIGE = 2770, 2840, 2841 -- minerai, barre, tige
 local function scenario(t)
   local r = {}
   for k, x in pairs(t.recettes) do
-    r[k] = { x[1], 1, 1, "Forge", x[2], x[3], x[4], x[5], x[6], x[7] or "maître", "source externe", x[8] or 0, x[9] or 0 }
+    r[k] = { x[1], 1, 1, "Forge", x[2], x[3], x[4], x[5], x[6], x[7] or "maître", "source externe", x[8] or 0, x[9] or 0, x[10] }
   end
   acns.recettesClassic = r
   local items = {}
@@ -49,7 +49,9 @@ local function scenario(t)
   AzerothCommuneDB.vendors = { [1] = { items = v } }
   AzerothCommuneItems.items = {}
   for id, prix in pairs(t.revente or {}) do AzerothCommuneItems.items[id] = { name = "#" .. id, price = prix } end
-  AzerothCommuneDB.chars = { [MOI] = { nom = "Moi Dupont", professions = { { name = "Forge", rank = t.rang, max = 300 } } } }
+  AzerothCommuneDB.chars = { [MOI] = { nom = "Moi Dupont", professions = { { name = "Forge", rank = t.rang, max = 300 } },
+    recipes = t.connues and { Forge = { rank = t.rang, max = 300, known = t.connues } } or nil } }
+  AzerothCommuneDB.trainers = t.maitres
   return assert(Maitrise.Tranche(nil, "Forge", t.curseur))
 end
 local function achat(res, id)
@@ -132,6 +134,23 @@ assert(#res.fabrications == 1 and res.fabrications[1].nom == "Fin" and #res.trou
 res = scenario({ rang = 26, curseur = 27, marchands = { [M] = 10 }, recettes = R20 })
 assert(res.fabrications[1].nom == "Fin", "à 20 % la règle ne joue pas : " .. noms(res))
 print("Maîtrise : règle des 20 % (évité si une autre recette couvre, gardé sinon) OK")
+
+-- Conditions d'accès (AzerothCommune#67) : une recette à spécialisation n'est prise que si le personnage la connaît ; le prix
+-- du maître relevé (AzerothCommune#72) compte pour une recette de maître. « Tribal » (1 minerai) contre « Lame » (2).
+local RC = { [1] = { 5001, "Lame", { M, 2 }, 1, 10, 20 }, [2] = { 5002, "Tribal", { M, 1 }, 1, 10, 20, nil, nil, nil, "spécialisation : travail du cuir tribal" } }
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RC })
+assert(res.fabrications[1].nom == "Lame", "recette à condition, pas connue : écartée : " .. noms(res))
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RC, connues = { [2] = true } })
+assert(res.fabrications[1].nom == "Tribal", "recette à condition déjà connue : permise : " .. noms(res))
+-- Le maître vend « Lame » 500 : la Lame coûte 9 × 20 + 500 = 680, le Bouclier (3 minerais, sans prix) 270 : il gagne.
+local RM = { [1] = { 5001, "Lame", { M, 2 }, 1, 10, 20 }, [3] = { 5003, "Bouclier", { M, 3 }, 1, 10, 20 } }
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RM })
+assert(res.fabrications[1].nom == "Lame", "sans maître relevé : la Lame : " .. noms(res))
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RM,
+  maitres = { [1] = { services = { { name = "Lame", skill = "Forge", skill_rank = 1, cost = 500 } } } } })
+assert(res.fabrications[1].nom == "Bouclier" and res.patrons == 0, "le prix du maître compte : " .. noms(res))
+AzerothCommuneDB.trainers = nil
+print("Maîtrise : conditions d'accès et prix du maître OK")
 
 -- Plages de couleur et fourchettes (Maitrise#11), seuils du client : orange sous le jaune, vert au milieu jaune/gris.
 -- « Orange » 1-10-20 → 10 orange ; « Longue » (jaune 10, gris 50) : de 10 à 30 jaune, de 30 à 50 vert.
