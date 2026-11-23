@@ -41,6 +41,6 @@ Une recette de la route que le personnage ne connaît pas encore (chez un maîtr
 _Avoid_: patron (sur l'étape)
 
 **Une fois sur dix**:
-Le coût net de la tranche au 90e centile, affiché dans le résumé : le net moyen plus, étape par étape, le net par fabrication × les fabrications au-dessus de la moyenne. Un majorant prudent (somme de centiles), égal au net moyen quand tout est orange.
+Le coût net de la tranche au 90e centile, affiché dans le résumé : le net moyen plus, étape par étape, le net par fabrication × les fabrications au-dessus de la moyenne. Une estimation prudente (somme de centiles), égale au net moyen quand tout est orange.
 
 **Fabrication** : une ligne « recette × nombre de fois » d'un projet tenu, voir le glossaire de Composants.

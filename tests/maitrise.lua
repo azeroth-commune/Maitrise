@@ -251,7 +251,8 @@ test("Maîtrise : le résumé a ses postes, l'étape son net, l'apprentissage sa
         if e.apprendre then
             apprends = apprends + 1
             assertTrue(r.nom:GetText():find("Apprendre " .. e.nom, 1, true) ~= nil, r.nom:GetText())
-            assertTrue(r.icone:IsShown() and #r.traits >= 0, "une icône (le livre)")
+            assertTrue(r.icone:IsShown(), "une icône (le livre)")
+            for _, t in ipairs(r.traits) do assertTrue(not t:IsShown(), "pas de trait coloré propre à un apprentissage (ligne réemployée)") end
         elseif e.plages then
             fabs = fabs + 1
             assertTrue(r.detail:GetText():find(" par objet", 1, true) ~= nil, "net par objet : " .. r.detail:GetText())

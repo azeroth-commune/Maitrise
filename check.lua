@@ -264,6 +264,11 @@ res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, hv = { [7001]
   recettes = { [1] = RH[1], [9] = { 5009, "Butin", { M, 1 }, 1, 10, 20, "inconnue", nil, nil, nil, 7001 } } })
 assert(res.apprentissages[1].nom == "Butin" and res.apprentissages[1].source == "Patron à l'HV" and res.apprentissages[1].prix == 100
   and res.apprentissages[1].objetPatron == 7001, "patron à l'HV")
+-- Un maître relevé qui enseigne gratis : prix 0 connu, pas « prix inconnu » (relecture de la PR #19).
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Lame", { M, 2 }, 1, 10, 20 } },
+  maitres = { [1] = { services = { { name = "Lame", skill = "Forge", skill_rank = 1, cost = 0 } } } } })
+AzerothCommuneDB.trainers = nil
+assert(res.apprentissages[1] and res.apprentissages[1].prix == 0, "prix de maître relevé à 0 : connu")
 print("Maîtrise : apprentissages (niveau, source, prix, connues exclues) OK")
 
 -- La tranche tenue (Maitrise#3) : créer, une seule par perso et métier, progression, recalculer, finir.

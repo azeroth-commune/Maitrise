@@ -46,10 +46,13 @@ function ns.recettesDuMetier(base, metier, connues, prixPatron)
       local hv = not connue and prixPatron and r.patron and PATRON_HV[r.source] and prixPatron(r.patron)
       local patronHV = hv and (r.source == "inconnue" or prix == 0 or hv < prix)
       if patronHV then prix = hv end
+      -- Le prix pour l'apprendre est-il connu ? (un maître relevé peut enseigner gratis : 0 connu n'est pas « inconnu »)
+      local prixConnu = connue or r.source == "d'emblée" or patronHV or (r.source == "maître" and r.prix_maitre ~= nil)
+        or (r.source == "patron vendu" and r.pattern_price ~= nil)
       if connue or SOURCES[r.source] or patronHV then
         out[#out + 1] = { key = k, name = r.name, learn = r.level or 1, y = r.yellow, g = r.grey, o = r.output,
           n = math.max(1, r.made_min or 1), reag = r.reagents or {}, pattern = prix, patronHV = patronHV or nil,
-          src = r.source, objetPatron = r.patron, connue = connue and true or nil }
+          src = r.source, objetPatron = r.patron, connue = connue and true or nil, prixConnu = prixConnu and true or nil }
       end
     end
   end
@@ -171,7 +174,9 @@ function ns.route(rs, achat, revente, FROM, TO)
       end
       local v = 0
       if r.o then v = ((need[r.o] or 0) > 0 and (unit(r.o, s, 1) or 0) or revente(r.o)) * r.n end
-      return (c - v) / p + (apprendre[r] or 0), p, c - v -- le net d'une fabrication : composants − produit
+      -- 3e valeur, le net d'une fabrication affiché (Maitrise#12) : composants − revente au marchand du produit, ce qui sort
+      -- et rentre vraiment ; le choix, lui, valorise un produit réemployé à son coût de remplacement (v).
+      return (c - v) / p + (apprendre[r] or 0), p, c - (r.o and revente(r.o) * r.n or 0)
     end
     local steps = {}
     for s = FROM, TO - 1 do
@@ -291,7 +296,7 @@ function ns.route(rs, achat, revente, FROM, TO)
           vues[r] = true
           apprentissages[#apprentissages + 1] = { niveau = s, cle = r.key, nom = r.name, patronHV = r.patronHV,
             source = r.patronHV and "Patron à l'HV" or (r.src == "maître" and "Maître" or "Patron"),
-            prix = r.pattern > 0 and r.pattern or nil, objetPatron = r.src ~= "maître" and r.objetPatron or nil }
+            prix = r.prixConnu and r.pattern or nil, objetPatron = r.src ~= "maître" and r.objetPatron or nil }
         end
       end
       last.a, last.fois = s + 1, last.fois + b.crafts
@@ -316,8 +321,9 @@ function ns.route(rs, achat, revente, FROM, TO)
     f.fois = math.ceil(f.fois - 1e-9)
   end
   -- Le coût « une fois sur dix » (Maitrise#12) : le net moyen, plus pour chaque étape non orange son net par fabrication
-  -- (s'il est positif) × les fabrications de plus du 90e centile. Somme des 90e centiles étape par étape : un majorant
-  -- prudent (le vrai 90e centile de la somme est plus bas, les aléas des étapes se compensent un peu) ; sans aléa (étapes
+  -- (s'il est positif) × les fabrications de plus du 90e centile. Somme des 90e centiles étape par étape : une estimation
+  -- prudente (le vrai 90e centile de la somme est plus bas, les aléas se compensent un peu ; mais les étapes à gain et
+  -- les paliers de prix suivants ne sont pas comptés : ce n'est pas un majorant strict) ; sans aléa (étapes
   -- orange), égal au net moyen. Pas de convolution : même approximation que les fourchettes.
   local net = bestPlan.achats + bestPlan.patrons - bestPlan.revente
   local dix = net
@@ -350,7 +356,7 @@ end
 -- des points en vert) } }, achats = { { id, qty, cout } }, totalAchats, patrons,
 -- total, revente, trous = { { de, a } }, sansPrix = { id… }, incomplet, scan (date lisible du dernier scan de l'HV, nil
 -- sans), sansHV (aucun cours de l'HV : marchands seuls), net (total − revente), netUneSurDix (le net au 90e centile,
--- majorant : voir ns.route), apprentissages = { { niveau, cle, nom, source (« Maître », « Patron », « Patron à l'HV »), prix
+-- estimation prudente : voir ns.route), apprentissages = { { niveau, cle, nom, source (« Maître », « Patron », « Patron à l'HV »), prix
 -- (nil : inconnu), objetPatron } } (les recettes à apprendre, à leur niveau ; sans les connues) } ; chaque fabrication porte
 -- aussi net (composants − revente du produit, par fabrication, en cuivre) }, ou nil et la raison.
 -- ponytail: le stock n'entre pas dans la route (tout acheté) ; Composants le déduit dans les Besoins du projet de
@@ -383,6 +389,7 @@ function ns.tranche(guid, metier, curseur)
   -- Le prix d'un patron à l'HV : celui d'UN patron au dernier scan, l'HV seule (un patron de butin n'a pas de marchand).
   local function prixPatron(id) return (lib:PrixAchat(id, 1, lignes, {})) end
   local res = ns.route(ns.recettesDuMetier(base, metier, connues, prixPatron), achat, revente, rang, curseur)
+  res.connuesLues = connues ~= nil -- sans relevé, toute recette de la route est listée à apprendre
   res.metier = metier
   res.scan = hv and lotHV and lotHV.scan and lotHV.scan.scanned
   res.fournisseur = hv and lotHV and lotHV.fournisseur

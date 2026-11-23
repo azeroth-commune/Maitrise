@@ -74,10 +74,8 @@ local function bulle(self)
     if e.objetPatron then GameTooltip:SetItemByID(e.objetPatron) else GameTooltip:SetSpellByID(e.cle) end
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine(texteApprendre(e), 0.95, 0.65, 0.25)
-    if e.objetPatron then
-      GameTooltip:AddLine("Maj+clic : le lien dans le chat", 0.6, 0.6, 0.6)
-      GameTooltip:AddLine("Ctrl+clic droit : dans le Brouillon de Composants", 0.6, 0.6, 0.6)
-    end
+    GameTooltip:AddLine("Maj+clic : le lien dans le chat", 0.6, 0.6, 0.6)
+    if e.objetPatron then GameTooltip:AddLine("Ctrl+clic droit : dans le Brouillon de Composants", 0.6, 0.6, 0.6) end
     GameTooltip:Show()
     return
   end
@@ -91,12 +89,10 @@ local function bulle(self)
 end
 local function clic(self)
   local e = self:GetParent().etape
-  if e.apprendre then
-    local l = e.objetPatron and lienObjet(e.objetPatron)
-    if l then HandleModifiedItemClick(l) end
-  elseif e.objet then
-    local l = lienObjet(e.objet)
-    if l then HandleModifiedItemClick(l) end
+  -- Un patron (ligne « Apprendre ») ou le produit d'une étape : les clics d'un objet ; sinon (maître, enchantement) le sort.
+  local id = e.objetPatron or e.objet
+  if id then
+    HandleModifiedItemClick(lienObjet(id))
   elseif IsModifiedClick("CHATLINK") then
     local l = lienSort(e.cle)
     if l then ChatEdit_InsertLink(l) end
@@ -203,7 +199,7 @@ local function dessinerFrise()
     r.icone:SetShown(not e.trou and not e.fin)
     traitsEtape(r, e)
     if e.apprendre then
-      r.point:SetColorTexture(0.95, 0.65, 0.25, 1)
+      r.point:SetColorTexture(0.85, 0.85, 0.85, 0.7) -- un tiret neutre, comme une étape : l'axe garde les couleurs des recettes
       r.icone.tex:SetTexture("Interface\\Icons\\INV_Misc_Book_11")
       r.nom:SetText("|cfff2a640" .. texteApprendre(e) .. "|r")
       r.detail:SetText("à apprendre avant l'étape suivante")
@@ -239,8 +235,11 @@ end
 -- marchand, maître et patrons | net, net une fois sur dix), puis les avertissements (HV pas scanné, composants sans
 -- prix en rouge, trous en orange). Le total net = composants + maître et patrons − ventes au marchand.
 local function postes(r)
+  local inconnus = 0
+  for _, a in ipairs(r.apprentissages or {}) do if a.prix == nil then inconnus = inconnus + 1 end end
+  local appr = lib.ArgentCourt(r.patrons) .. (inconnus > 0 and (" + %d prix inconnu%s"):format(inconnus, inconnus > 1 and "s" or "") or "")
   return ("Composants : %s\nVentes au marchand : %s\nMaître et patrons : %s"):format(lib.ArgentCourt(r.totalAchats),
-      lib.ArgentCourt(r.revente), lib.ArgentCourt(r.patrons)),
+      lib.ArgentCourt(r.revente), appr),
     ("|cffffd100Total net : %s|r\nJusqu'à %s une fois sur dix"):format(lib.ArgentCourt(r.net), lib.ArgentCourt(r.netUneSurDix))
 end
 local function ecrireResume()
@@ -253,11 +252,15 @@ local function ecrireResume()
   if res.sansHV then prix = "|cffe64d4dHV pas scanné : prix des marchands seulement.|r"
   else prix = "prix : " .. (res.scan and ("scan de l'HV du " .. res.scan) or ("cours de " .. tostring(res.fournisseur or "l'HV"))) end
   resume.titre:SetText(("|cffffd100%s, de %d à %d|r · %s"):format(res.metier, res.de, res.a, prix))
-  resume.gauche:SetText((postes(res)))
-  resume.droite:SetText((select(2, postes(res))))
+  local g, d = postes(res)
+  resume.gauche:SetText(g)
+  resume.droite:SetText(d)
   local l = {}
   if #res.sansPrix > 0 then
     l[#l + 1] = ("|cffe64d4d%d composant(s) sans prix : les recettes qui en ont besoin sont écartées.|r"):format(#res.sansPrix)
+  end
+  if not res.connuesLues and #(res.apprentissages or {}) > 0 then
+    l[#l + 1] = "|cffff9933Recettes connues pas encore relevées : toutes celles de la route sont listées à apprendre.|r"
   end
   if #res.trous > 0 then
     local t = {}
@@ -385,7 +388,8 @@ local function construire()
   end
   texte("titre", 16, -70, true)
   texte("gauche", 16, -88)
-  texte("droite", 300, -88)
+  resume.gauche:SetWidth(280) -- une largeur pour chaque colonne : sans elle, la ligne la plus longue est coupée
+  texte("droite", 300, -88, true)
   texte("avert", 16, -136, true)
 
   vues = {}
