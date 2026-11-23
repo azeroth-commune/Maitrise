@@ -233,6 +233,44 @@ for k = 0, 1000 do c = c + (d[k] or 0); if not eb and c >= 0.1 then eb = k end; 
 assert(math.abs(bas - eb) <= 1 and math.abs(haut - eh) <= 1, ("fourchette %d-%d, exacte %d-%d"):format(bas, haut, eb, eh))
 print("Maîtrise : plages de couleur et fourchettes OK")
 
+-- Le résumé (Maitrise#12) : le coût « une fois sur dix » dépasse le net moyen dès qu'une étape n'est pas orange (somme des
+-- 90e centiles étape par étape, un majorant) et l'égale quand tout est orange ; le net par fabrication de chaque étape.
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Orange", { M, 1 }, 1, 10, 20 } } })
+assert(res.net == res.total - res.revente and res.netUneSurDix == res.net, "tout orange : une fois sur dix = le net moyen")
+res = scenario({ rang = 5, curseur = 50, marchands = { [M] = 10 }, recettes = LONGUE })
+assert(res.netUneSurDix > res.net, "étape non orange : une fois sur dix au-dessus du net moyen")
+assert(etape(res, "Longue").net == 10, "net par fabrication : un minerai à 10 : " .. etape(res, "Longue").net)
+-- Net par fabrication = composants − revente du produit au marchand (le produit 5002 revendu 4 : 10 − 4).
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, revente = { [5002] = 4 }, recettes = { [1] = { 5002, "Lame", { M, 1 }, 1, 10, 20 } } })
+assert(res.fabrications[1].net == 6, "net 10 − 4 : " .. res.fabrications[1].net)
+print("Maîtrise : résumé (une fois sur dix, net par fabrication) OK")
+
+-- Les apprentissages (Maitrise#13) : « A » (maître, 500) de 1 à 10, « B » (patron vendu, 300) à partir de 10, « C » (connue) ;
+-- chaque recette à apprendre, à son niveau, avec sa source et son prix ; la connue n'a pas de ligne.
+local RP = { [1] = { 5001, "A", { M, 3 }, 1, 10, 20 }, [2] = { 5002, "B", { M, 1 }, 10, 20, 30, "patron vendu", 300 } }
+local MAITRE = { [1] = { services = { { name = "A", skill = "Forge", skill_rank = 1, cost = 500 } } } }
+res = scenario({ rang = 1, curseur = 30, marchands = { [M] = 10 }, recettes = RP, maitres = MAITRE })
+local ap = res.apprentissages
+assert(#ap == 2, #ap)
+assert(ap[1].nom == "A" and ap[1].niveau == 1 and ap[1].source == "Maître" and ap[1].prix == 500, "A : maître, 500 : " .. tostring(ap[1].prix))
+assert(ap[2].nom == "B" and ap[2].niveau == 10 and ap[2].source == "Patron" and ap[2].prix == 300, "B : patron, 300, au niveau 10 : " .. ap[2].niveau)
+assert(res.patrons == 800, "le total compte les deux : " .. res.patrons)
+res = scenario({ rang = 1, curseur = 30, marchands = { [M] = 10 }, recettes = RP, maitres = MAITRE, connues = { [2] = true } })
+assert(#res.apprentissages == 1 and res.apprentissages[1].nom == "A", "B connue : pas de ligne")
+res = scenario({ rang = 1, curseur = 30, marchands = { [M] = 10 }, recettes = RP })
+assert(res.apprentissages[1].nom == "A" and res.apprentissages[1].prix == nil, "maître sans prix relevé : prix inconnu")
+-- Un patron à l'HV : source « Patron à l'HV », l'objet patron pour la bulle et les clics.
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, hv = { [7001] = { { 100, 1 } } },
+  recettes = { [1] = RH[1], [9] = { 5009, "Butin", { M, 1 }, 1, 10, 20, "inconnue", nil, nil, nil, 7001 } } })
+assert(res.apprentissages[1].nom == "Butin" and res.apprentissages[1].source == "Patron à l'HV" and res.apprentissages[1].prix == 100
+  and res.apprentissages[1].objetPatron == 7001, "patron à l'HV")
+-- Un maître relevé qui enseigne gratis : prix 0 connu, pas « prix inconnu » (relecture de la PR #19).
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Lame", { M, 2 }, 1, 10, 20 } },
+  maitres = { [1] = { services = { { name = "Lame", skill = "Forge", skill_rank = 1, cost = 0 } } } } })
+AzerothCommuneDB.trainers = nil
+assert(res.apprentissages[1] and res.apprentissages[1].prix == 0, "prix de maître relevé à 0 : connu")
+print("Maîtrise : apprentissages (niveau, source, prix, connues exclues) OK")
+
 -- La tranche tenue (Maitrise#3) : créer, une seule par perso et métier, progression, recalculer, finir.
 local function rang(r) AzerothCommuneDB.chars[MOI].professions[1].rank = r end
 res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Lame", { M, 2 }, 1, 10, 20 } } })

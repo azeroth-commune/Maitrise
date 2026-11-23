@@ -8,6 +8,7 @@ local lib = AzerothCommune
 local RECOLTE = { ["Minage"] = true, ["Herboristerie"] = true, ["Dépeçage"] = true, ["Pêche"] = true }
 local nomsDeSession = {}
 local frame, metierB, curseurE, calculB, etatB, resume, tabAchats, vues, frise
+local HAUT = 190 -- sous l'en-tête (réglages, résumé de la tranche) : le haut de la frise et du tableau des achats
 local choix -- le métier choisi
 local res -- la dernière tranche calculée
 
@@ -47,8 +48,14 @@ local function detailEtape(e)
   if e.fourchette and e.fourchette.bas < e.fourchette.haut then
     fab = ("%d à %d fabrications (%d en moyenne)"):format(e.fourchette.bas, e.fourchette.haut, e.fois)
   else fab = ("%d fabrication(s)"):format(e.fois) end
-  return ("de %d à %d · %s%s%s"):format(e.de, e.a, fab, e.incertaine and " · |cffff9933incertaine|r" or "",
-    e.patron > 0 and ((e.patronHV and " · patron à l'HV " or " · patron ") .. lib.ArgentCourt(e.patron)) or "")
+  -- Le net par objet (Maitrise#12) : composants moins revente au marchand du produit, par fabrication. Le patron n'est pas
+  -- répété ici : il a sa ligne « Apprendre » (Maitrise#13).
+  local net = e.net >= 0 and ("net " .. lib.ArgentCourt(math.floor(e.net + 0.5))) or ("gain " .. lib.ArgentCourt(math.floor(-e.net + 0.5)))
+  return ("de %d à %d · %s%s · %s par objet"):format(e.de, e.a, fab, e.incertaine and " · |cffff9933incertaine|r" or "", net)
+end
+-- Une ligne d'apprentissage : « Apprendre X — Maître · 25 pa ».
+local function texteApprendre(e)
+  return ("Apprendre %s — %s · %s"):format(e.nom, e.source, e.prix and lib.ArgentCourt(e.prix) or "prix inconnu")
 end
 -- Le lien d'un objet : celui du jeu (chargé par la bulle au survol), sinon un lien fait à la main, que Composants lit
 -- aussi bien (il ne regarde que « item:<id> »).
@@ -63,20 +70,29 @@ local function iconeSort(id) return (C_Spell and C_Spell.GetSpellTexture and C_S
 local function bulle(self)
   local e = self:GetParent().etape
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+  if e.apprendre then
+    if e.objetPatron then GameTooltip:SetItemByID(e.objetPatron) else GameTooltip:SetSpellByID(e.cle) end
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine(texteApprendre(e), 0.95, 0.65, 0.25)
+    GameTooltip:AddLine("Maj+clic : le lien dans le chat", 0.6, 0.6, 0.6)
+    if e.objetPatron then GameTooltip:AddLine("Ctrl+clic droit : dans le Brouillon de Composants", 0.6, 0.6, 0.6) end
+    GameTooltip:Show()
+    return
+  end
   if e.objet then GameTooltip:SetItemByID(e.objet) else GameTooltip:SetSpellByID(e.cle) end
   GameTooltip:AddLine(" ")
   GameTooltip:AddLine(("De %d à %d : %d fabrication(s)"):format(e.de, e.a, e.fois), 1, 0.82, 0)
   for _, c in ipairs(e.composants) do GameTooltip:AddLine(("%d × %s"):format(c.qty * e.fois, nomObjet(c.id)), 0.8, 0.8, 0.8) end
-  if e.patron > 0 then GameTooltip:AddLine((e.patronHV and "Patron à acheter à l'HV : " or "Patron à acheter : ") .. lib.Argent(e.patron), 0.95, 0.65, 0.25) end
   GameTooltip:AddLine("Maj+clic : le lien dans le chat", 0.6, 0.6, 0.6)
   if e.objet then GameTooltip:AddLine("Ctrl+clic droit : dans le Brouillon de Composants", 0.6, 0.6, 0.6) end
   GameTooltip:Show()
 end
 local function clic(self)
   local e = self:GetParent().etape
-  if e.objet then
-    local l = lienObjet(e.objet)
-    if l then HandleModifiedItemClick(l) end
+  -- Un patron (ligne « Apprendre ») ou le produit d'une étape : les clics d'un objet ; sinon (maître, enchantement) le sort.
+  local id = e.objetPatron or e.objet
+  if id then
+    HandleModifiedItemClick(lienObjet(id))
   elseif IsModifiedClick("CHATLINK") then
     local l = lienSort(e.cle)
     if l then ChatEdit_InsertLink(l) end
@@ -84,9 +100,9 @@ local function clic(self)
 end
 
 local function construireFrise(parent)
-  frise = { etapes = {}, largeur = 500 }
+  frise = { etapes = {}, largeur = 600 }
   frise.scroll = CreateFrame("ScrollFrame", nil, parent, "UIPanelScrollFrameTemplate")
-  frise.scroll:SetPoint("TOPLEFT", 14, -124)
+  frise.scroll:SetPoint("TOPLEFT", 14, -HAUT)
   frise.scroll:SetPoint("BOTTOMRIGHT", -32, 14)
   frise.contenu = CreateFrame("Frame", nil, frise.scroll)
   frise.contenu:SetSize(frise.largeur, 1)
@@ -129,6 +145,7 @@ local function cadreEtape(i)
   r.detail:SetPoint("TOPLEFT", r.nom, "BOTTOMLEFT", 0, -4)
   r.detail:SetPoint("RIGHT", -6, 0)
   r.detail:SetJustifyH("LEFT")
+  r.detail:SetWordWrap(false)
   frise.etapes[i] = r
   return r
 end
@@ -160,7 +177,19 @@ local function dessinerFrise()
   if res then
     for _, f in ipairs(res.fabrications) do etapes[#etapes + 1] = f end
     for _, t in ipairs(res.trous) do etapes[#etapes + 1] = { de = t.de, a = t.a, trou = true } end
-    table.sort(etapes, function(x, y) return x.de < y.de end)
+    -- Les apprentissages à leur niveau, avant l'étape qui les demande (même niveau : l'apprentissage d'abord).
+    for _, a in ipairs(res.apprentissages) do
+      local l = {}
+      for k, v in pairs(a) do l[k] = v end
+      l.de, l.apprendre = a.niveau, true
+      etapes[#etapes + 1] = l
+    end
+    for i, e in ipairs(etapes) do e.ordre = i end
+    table.sort(etapes, function(x, y)
+      if x.de ~= y.de then return x.de < y.de end
+      if (x.apprendre or false) ~= (y.apprendre or false) then return x.apprendre or false end
+      return x.ordre < y.ordre
+    end)
     etapes[#etapes + 1] = { de = res.a, fin = true }
   end
   for i, e in ipairs(etapes) do
@@ -169,7 +198,12 @@ local function dessinerFrise()
     r.niveau:SetText(e.de)
     r.icone:SetShown(not e.trou and not e.fin)
     traitsEtape(r, e)
-    if e.trou then
+    if e.apprendre then
+      r.point:SetColorTexture(0.85, 0.85, 0.85, 0.7) -- un tiret neutre, comme une étape : l'axe garde les couleurs des recettes
+      r.icone.tex:SetTexture("Interface\\Icons\\INV_Misc_Book_11")
+      r.nom:SetText("|cfff2a640" .. texteApprendre(e) .. "|r")
+      r.detail:SetText("à apprendre avant l'étape suivante")
+    elseif e.trou then
       r.point:SetColorTexture(0.9, 0.3, 0.3, 1)
       r.nom:SetText("|cffff9933Aucune recette de source connue|r")
       r.detail:SetText(("de %d à %d"):format(e.de, e.a))
@@ -197,25 +231,44 @@ local function onglet(i)
   for k, v in ipairs(vues) do v:SetShown(k == i) end
 end
 
--- Le résumé sous les réglages : le coût, la date des prix et ce qui manque (avertissements en rouge, trous en orange).
+-- Le résumé sous les réglages (Maitrise#12) : en-tête de la tranche, puis deux colonnes de postes (composants, ventes au
+-- marchand, maître et patrons | net, net une fois sur dix), puis les avertissements (HV pas scanné, composants sans
+-- prix en rouge, trous en orange). Le total net = composants + maître et patrons − ventes au marchand.
+local function postes(r)
+  local inconnus = 0
+  for _, a in ipairs(r.apprentissages or {}) do if a.prix == nil then inconnus = inconnus + 1 end end
+  local appr = lib.ArgentCourt(r.patrons) .. (inconnus > 0 and (" + %d prix inconnu%s"):format(inconnus, inconnus > 1 and "s" or "") or "")
+  return ("Composants : %s\nVentes au marchand : %s\nMaître et patrons : %s"):format(lib.ArgentCourt(r.totalAchats),
+      lib.ArgentCourt(r.revente), appr),
+    ("|cffffd100Total net : %s|r\nJusqu'à %s une fois sur dix"):format(lib.ArgentCourt(r.net), lib.ArgentCourt(r.netUneSurDix))
+end
 local function ecrireResume()
-  if not res then resume:SetText("Choisis un métier et jusqu'où le monter, puis Calculer.") return end
-  local l = { ("|cffffd100%s, de %d à %d|r   achats %s%s · revente au marchand %s · net %s"):format(res.metier, res.de, res.a,
-    lib.ArgentCourt(res.totalAchats), res.patrons > 0 and (" + patrons " .. lib.ArgentCourt(res.patrons)) or "",
-    lib.ArgentCourt(res.revente), lib.ArgentCourt(res.total - res.revente)) }
-  if res.sansHV then l[#l + 1] = "|cffe64d4dHV pas scanné : prix des marchands seulement.|r"
-  else l[#l + 1] = "Prix : " .. (res.scan and ("scan de l'HV du " .. res.scan) or ("cours de " .. tostring(res.fournisseur or "l'HV"))) end
+  if not res then
+    resume.titre:SetText("Choisis un métier et jusqu'où le monter, puis Calculer.")
+    resume.gauche:SetText(""); resume.droite:SetText(""); resume.avert:SetText("")
+    return
+  end
+  local prix
+  if res.sansHV then prix = "|cffe64d4dHV pas scanné : prix des marchands seulement.|r"
+  else prix = "prix : " .. (res.scan and ("scan de l'HV du " .. res.scan) or ("cours de " .. tostring(res.fournisseur or "l'HV"))) end
+  resume.titre:SetText(("|cffffd100%s, de %d à %d|r · %s"):format(res.metier, res.de, res.a, prix))
+  local g, d = postes(res)
+  resume.gauche:SetText(g)
+  resume.droite:SetText(d)
+  local l = {}
   if #res.sansPrix > 0 then
     l[#l + 1] = ("|cffe64d4d%d composant(s) sans prix : les recettes qui en ont besoin sont écartées.|r"):format(#res.sansPrix)
+  end
+  if not res.connuesLues and #(res.apprentissages or {}) > 0 then
+    l[#l + 1] = "|cffff9933Recettes connues pas encore relevées : toutes celles de la route sont listées à apprendre.|r"
   end
   if #res.trous > 0 then
     local t = {}
     for _, h in ipairs(res.trous) do t[#t + 1] = ("%d – %d"):format(h.de, h.a) end
     l[#l + 1] = "|cffff9933Aucune recette de source connue de " .. table.concat(t, ", ") .. ".|r"
   end
-  resume:SetText(table.concat(l, "\n"))
+  resume.avert:SetText(table.concat(l, "\n"))
 end
-
 local function afficher(r)
   res = r
   dessinerFrise()
@@ -289,7 +342,7 @@ local function choisir(nom)
 end
 
 local function construire()
-  frame = lib.Fenetre("MaitriseFrame", "Maîtrise", 660, 460)
+  frame = lib.Fenetre("MaitriseFrame", "Maîtrise", 660, 520)
   metierB = CreateFrame("DropdownButton", nil, frame, "WowStyle1DropdownTemplate")
   metierB:SetWidth(180)
   metierB:SetPoint("TOPLEFT", 14, -40)
@@ -324,11 +377,20 @@ local function construire()
   etatB:SetScript("OnEnter", bulleTranche)
   etatB:SetScript("OnLeave", function() GameTooltip:Hide() end)
   C_Timer.NewTicker(5, majBouton)
-  resume = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  resume:SetPoint("TOPLEFT", 16, -72)
-  resume:SetPoint("RIGHT", -16, 0)
-  resume:SetJustifyH("LEFT")
-  resume:SetSpacing(3)
+  resume = {}
+  local function texte(nom, x, y, droite)
+    local t = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    t:SetPoint("TOPLEFT", x, y)
+    if droite then t:SetPoint("RIGHT", -16, 0) end
+    t:SetJustifyH("LEFT")
+    t:SetSpacing(3)
+    resume[nom] = t
+  end
+  texte("titre", 16, -70, true)
+  texte("gauche", 16, -88)
+  resume.gauche:SetWidth(280) -- une largeur pour chaque colonne : sans elle, la ligne la plus longue est coupée
+  texte("droite", 300, -88, true)
+  texte("avert", 16, -136, true)
 
   vues = {}
   for i = 1, 2 do
@@ -336,7 +398,7 @@ local function construire()
     vues[i]:SetAllPoints()
   end
   construireFrise(vues[1])
-  tabAchats = lib.Tableau(vues[2], COL_ACHATS, { name = "achats", sort = "cout", top = 128, bottom = 14 })
+  tabAchats = lib.Tableau(vues[2], COL_ACHATS, { name = "achats", sort = "cout", top = HAUT + 4, bottom = 14 })
   frame.Tabs = {}
   for i, nom in ipairs({ "Route", "Achats" }) do
     local t = CreateFrame("Button", nil, frame, "PanelTabButtonTemplate")

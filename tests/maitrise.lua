@@ -44,13 +44,13 @@ test("Maîtrise : la route d'une tranche de Forge, 1 → 40, dans la fenêtre", 
     assertEquals("22/11 21:00", res.scan)
     -- La frise : une étape par fabrication, l'objectif au bout ; chaque fabrication porte l'icône de son objet.
     local vues = etapes()
-    assertEquals(#res.fabrications + #res.trous + 1, #vues, "les étapes de la frise")
+    assertEquals(#res.fabrications + #res.trous + #res.apprentissages + 1, #vues, "les lignes de la frise (étapes, apprentissages, objectif)")
     local avecIcone = 0
     for _, r in ipairs(vues) do if r.icone:IsShown() and r.icone.tex:GetTexture() then avecIcone = avecIcone + 1 end end
-    assertEquals(#res.fabrications, avecIcone, "une icône par fabrication")
+    assertEquals(#res.fabrications + #res.apprentissages, avecIcone, "une icône par fabrication et par apprentissage")
     -- Ctrl+clic droit sur l'icône, comme sur un objet du jeu : l'objet entre dans le Brouillon de Composants.
     local r1 = vues[1]
-    for _, r in ipairs(vues) do if r.etape.de < r1.etape.de then r1 = r end end
+    for _, r in ipairs(vues) do if r.etape.objet and (not r1.etape.objet or r.etape.de < r1.etape.de) then r1 = r end end
     local id = assert(r1.etape.objet, "la première étape fabrique un objet")
     local ctrl, alt, maj, souris = IsControlKeyDown, IsAltKeyDown, IsShiftKeyDown, GetMouseButtonClicked
     IsControlKeyDown, IsAltKeyDown, IsShiftKeyDown = function() return true end, function() return false end, function() return false end
@@ -203,13 +203,62 @@ test("Maîtrise : un patron à l'HV est dit « patron à l'HV » dans la frise",
     end
     enfants(MaitriseFrame, function(c) return c:GetObjectType() == "EditBox" end)[1]:SetText("250")
     bouton("Calculer"):Click()
+    -- Le patron a sa ligne « Apprendre » (Maitrise#13), plus répété sur l'étape.
     local trouve
     for _, r in ipairs(etapes()) do
-        if r.etape.cle == 9964 and r.etape.patronHV then
+        if r.etape.cle == 9964 and r.etape.apprendre then
             trouve = true
-            assertTrue(r.detail:GetText():find("patron à l'HV", 1, true) ~= nil, r.detail:GetText())
+            assertTrue(r.nom:GetText():find("Patron à l'HV", 1, true) ~= nil, r.nom:GetText())
+            assertEquals(7989, r.etape.objetPatron)
+        elseif r.etape.cle == 9964 then
+            assertTrue(r.etape.patronHV and r.detail:GetText():find("patron", 1, true) == nil, "pas de patron sur l'étape : " .. r.detail:GetText())
         end
     end
-    assertTrue(trouve, "une étape des Eperons en mithril, patron à l'HV")
+    assertTrue(trouve, "une ligne « Apprendre » des Eperons en mithril, patron à l'HV")
+    MaitriseFrame:Hide()
+end)
+
+-- Le résumé et le net par objet (Maitrise#12), les apprentissages à leur place (Maitrise#13) : tranche de Forge 1 → 40.
+test("Maîtrise : le résumé a ses postes, l'étape son net, l'apprentissage sa ligne", function()
+    local guid = UnitGUID("player")
+    AzerothCommuneDB.chars[guid].professions = { { name = "Forge", rank = 1, max = 300 } }
+    AzerothCommuneMarket[AzerothCommune.MaisonHV()] = { scanned = "22/11 21:00", time = time(), items = {
+        [2840] = { tiers = { { price = 40, qty = 2000 } } }, [2835] = { tiers = { { price = 10, qty = 2000 } } } } }
+    MaitriseDB = nil
+    SlashCmdList.MAITRISE("")
+    local dd = enfants(MaitriseFrame, function(c) return c.GenerateMenu and c.GetMenuDescription end)[1]
+    dd:GenerateMenu()
+    for _, e in dd:GetMenuDescription():EnumerateElementDescriptions() do
+        if MenuUtil.GetElementText(e) == "Forge (1)" then dd:Pick(e, MenuInputContext.MouseButton, "LeftButton") end
+    end
+    enfants(MaitriseFrame, function(c) return c:GetObjectType() == "EditBox" end)[1]:SetText("150")
+    bouton("Calculer"):Click()
+    local res = assert(Maitrise.Tranche(nil, "Forge", 150))
+    local texte = {}
+    for _, rg in ipairs({ MaitriseFrame:GetRegions() }) do
+        if rg.GetText and rg:GetText() then texte[#texte + 1] = rg:GetText() end
+    end
+    texte = table.concat(texte, "\n")
+    local ac = AzerothCommune.ArgentCourt
+    for _, morceau in ipairs({ "Composants : " .. ac(res.totalAchats), "Ventes au marchand : " .. ac(res.revente),
+        "Maître et patrons : " .. ac(res.patrons), "Total net : " .. ac(res.net), "Jusqu'à " .. ac(res.netUneSurDix) .. " une fois sur dix" }) do
+        assertTrue(texte:find(morceau, 1, true) ~= nil, "le résumé dit « " .. morceau .. " » : " .. texte)
+    end
+    assertTrue(res.netUneSurDix > res.net, "une fois sur dix au-dessus du net")
+    local vues, fabs, apprends = etapes(), 0, 0
+    for i, r in ipairs(vues) do
+        local e = r.etape
+        if e.apprendre then
+            apprends = apprends + 1
+            assertTrue(r.nom:GetText():find("Apprendre " .. e.nom, 1, true) ~= nil, r.nom:GetText())
+            assertTrue(r.icone:IsShown(), "une icône (le livre)")
+            for _, t in ipairs(r.traits) do assertTrue(not t:IsShown(), "pas de trait coloré propre à un apprentissage (ligne réemployée)") end
+        elseif e.plages then
+            fabs = fabs + 1
+            assertTrue(r.detail:GetText():find(" par objet", 1, true) ~= nil, "net par objet : " .. r.detail:GetText())
+        end
+    end
+    assertEquals(#res.fabrications, fabs)
+    assertEquals(#res.apprentissages, apprends, "une ligne par apprentissage")
     MaitriseFrame:Hide()
 end)
