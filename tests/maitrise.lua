@@ -141,3 +141,39 @@ test("Maîtrise : la tranche devient un projet tenu, se recalcule et se termine"
     MaitriseFrame:Hide()
     if ComposantsFrame then ComposantsFrame:Hide() end
 end)
+
+-- La frise colorée et ses fourchettes (Maitrise#11) : un trait par plage de couleur, la fourchette écrite pour une étape
+-- jaune ou verte, « incertaine » pour une étape surtout verte.
+test("Maîtrise : la frise colore l'axe et écrit les fourchettes", function()
+    local guid = UnitGUID("player")
+    AzerothCommuneDB.chars[guid].professions = { { name = "Forge", rank = 1, max = 300 } }
+    AzerothCommuneMarket[AzerothCommune.MaisonHV()] = { scanned = "22/11 21:00", time = time(), items = {
+        [2840] = { tiers = { { price = 40, qty = 2000 } } }, [2835] = { tiers = { { price = 10, qty = 2000 } } } } }
+    MaitriseDB = nil
+    SlashCmdList.MAITRISE("")
+    local dd = enfants(MaitriseFrame, function(c) return c.GenerateMenu and c.GetMenuDescription end)[1]
+    dd:GenerateMenu()
+    for _, e in dd:GetMenuDescription():EnumerateElementDescriptions() do
+        if MenuUtil.GetElementText(e) == "Forge (1)" then dd:Pick(e, MenuInputContext.MouseButton, "LeftButton") end
+    end
+    enfants(MaitriseFrame, function(c) return c:GetObjectType() == "EditBox" end)[1]:SetText("150")
+    bouton("Calculer"):Click()
+    local vues, orange, fourchette, incertaine, traits = etapes(), 0, 0, 0, 0
+    for _, r in ipairs(vues) do
+        local e = r.etape
+        if e.plages then
+            for i = 1, #e.plages do assertTrue(r.traits[i]:IsShown(), "un trait par plage de couleur") traits = traits + 1 end
+            local d = r.detail:GetText()
+            if e.fourchette then
+                fourchette = fourchette + 1
+                assertTrue(d:find(("%d à %d fabrications (%d en moyenne)"):format(e.fourchette.bas, e.fourchette.haut, e.fois), 1, true) ~= nil, d)
+            else
+                orange = orange + 1
+                assertTrue(d:find("à %d+ fabrications") == nil and d:find("moyenne", 1, true) == nil, "orange : un nombre simple : " .. d)
+            end
+            if e.incertaine then incertaine = incertaine + 1; assertTrue(d:find("incertaine", 1, true) ~= nil, d) end
+        end
+    end
+    assertTrue(traits > 0 and fourchette > 0, "des traits colorés et des fourchettes sur 1 → 150")
+    MaitriseFrame:Hide()
+end)

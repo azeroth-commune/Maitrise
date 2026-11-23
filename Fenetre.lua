@@ -33,8 +33,22 @@ local COL_ACHATS = {
 -- pour un enchantement) : survol = la bulle du jeu ; les clics d'un objet comme partout dans le jeu
 -- (HandleModifiedItemClick, clics gauche et droit) : Maj+clic = le lien dans le chat, Ctrl+clic = la cabine d'essayage,
 -- Ctrl+clic droit = dans le Brouillon de Composants (qui intercepte ce clic partout).
+-- Le trait de l'axe à côté d'une étape a la couleur de sa recette (orange, jaune, vert d'après les seuils du client),
+-- coupé aux changements de couleur, en proportion des points ; sous l'étape : sa fourchette (8 fois sur 10), « incertaine »
+-- quand elle est surtout verte.
 -- ponytail: verticale seulement ; une frise horizontale en option si l'envie vient.
 local ETAPE_H, AXE_X, ICONE = 46, 44, 34
+local COULEURS = { orange = { 1, 0.5, 0.15 }, jaune = { 1, 0.82, 0 }, vert = { 0.25, 0.8, 0.25 } }
+-- Le détail d'une étape : « de 25 à 85 · 13 à 18 fabrications (15 en moyenne) · incertaine », un nombre simple pour une
+-- étape orange (une fabrication = un point).
+local function detailEtape(e)
+  local fab
+  if e.fourchette and e.fourchette.bas < e.fourchette.haut then
+    fab = ("%d à %d fabrications (%d en moyenne)"):format(e.fourchette.bas, e.fourchette.haut, e.fois)
+  else fab = ("%d fabrication(s)"):format(e.fois) end
+  return ("de %d à %d · %s%s%s"):format(e.de, e.a, fab, e.incertaine and " · |cffff9933incertaine|r" or "",
+    e.patron > 0 and (" · patron " .. lib.ArgentCourt(e.patron)) or "")
+end
 -- Le lien d'un objet : celui du jeu (chargé par la bulle au survol), sinon un lien fait à la main, que Composants lit
 -- aussi bien (il ne regarde que « item:<id> »).
 local function lienObjet(id)
@@ -93,6 +107,7 @@ local function cadreEtape(i)
   r.point = r:CreateTexture(nil, "ARTWORK")
   r.point:SetSize(10, 10)
   r.point:SetPoint("CENTER", r, "LEFT", AXE_X, 0)
+  r.traits = {}
   r.icone = CreateFrame("Button", nil, r)
   r.icone:SetSize(ICONE, ICONE)
   r.icone:SetPoint("LEFT", AXE_X + 14, 0)
@@ -116,6 +131,28 @@ local function cadreEtape(i)
   return r
 end
 
+-- Les traits de l'axe de l'étape sur la hauteur de sa ligne, un par plage de couleur, au prorata des points.
+local function traitsEtape(r, e)
+  local n, y = (e.a or 0) - e.de, 0
+  for i, pl in ipairs(e.plages or {}) do
+    local t = r.traits[i]
+    if not t then
+      t = r:CreateTexture(nil, "ARTWORK", nil, -1) -- sous le rond de l'étape
+      t:SetWidth(4)
+      r.traits[i] = t
+    end
+    local h = ETAPE_H * (pl.a - pl.de) / n
+    local c = COULEURS[pl.couleur]
+    t:SetColorTexture(c[1], c[2], c[3], 1)
+    t:ClearAllPoints()
+    t:SetPoint("TOP", r, "TOPLEFT", AXE_X, -(ETAPE_H / 2 + y))
+    t:SetHeight(h)
+    t:Show()
+    y = y + h
+  end
+  for i = #(e.plages or {}) + 1, #r.traits do r.traits[i]:Hide() end
+end
+
 local function dessinerFrise()
   local etapes = {}
   if res then
@@ -129,6 +166,7 @@ local function dessinerFrise()
     r.etape = e
     r.niveau:SetText(e.de)
     r.icone:SetShown(not e.trou and not e.fin)
+    traitsEtape(r, e)
     if e.trou then
       r.point:SetColorTexture(0.9, 0.3, 0.3, 1)
       r.nom:SetText("|cffff9933Aucune recette de source connue|r")
@@ -141,8 +179,7 @@ local function dessinerFrise()
       r.point:SetColorTexture(0.66, 0.56, 1, 1)
       r.icone.tex:SetTexture(e.objet and C_Item.GetItemIconByID(e.objet) or iconeSort(e.cle) or "Interface\\Icons\\INV_Misc_QuestionMark")
       r.nom:SetText(e.nom or "?")
-      r.detail:SetText(("de %d à %d · %d fabrication(s)%s"):format(e.de, e.a, e.fois,
-        e.patron > 0 and (" · patron " .. lib.ArgentCourt(e.patron)) or ""))
+      r.detail:SetText(detailEtape(e))
     end
     r:Show()
   end
@@ -185,7 +222,8 @@ local function afficher(r)
 end
 
 -- Le bouton de la tranche (règle « info cliquable ») : sans tranche, « En faire un projet » ; avec, son état (compétence
--- sur le curseur : la progression, rien d'autre). Relu à l'ouverture et toutes les 5 s tant que la fenêtre est ouverte, par le socle seulement (jamais GetProfessions).
+-- sur le curseur : la progression, rien d'autre). Relu à l'ouverture et toutes les 5 s tant que la fenêtre est ouverte,
+-- par le socle seulement (jamais GetProfessions).
 local function majBouton()
   if not (frame and frame:IsShown() and choix) then return end
   local e = ns.trancheEtat(choix)

@@ -133,6 +133,44 @@ res = scenario({ rang = 25, curseur = 26, marchands = { [M] = 10 }, recettes = R
 assert(res.fabrications[1].nom == "Fin", "à 25 % la règle ne joue pas : " .. noms(res))
 print("Maîtrise : règle des 20 % (évité si une autre recette couvre, gardé sinon) OK")
 
+-- Plages de couleur et fourchettes (Maitrise#11), seuils du client : orange sous le jaune, vert au milieu jaune/gris.
+-- « Orange » 1-10-20 → 10 orange ; « Longue » (jaune 10, gris 50) : de 10 à 30 jaune, de 30 à 50 vert.
+local function etape(r, nom) for _, f in ipairs(r.fabrications) do if f.nom == nom then return f end end end
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Orange", { M, 1 }, 1, 10, 20 } } })
+local o = res.fabrications[1]
+assert(o.fourchette == nil and not o.incertaine, "étape orange : pas de fourchette")
+assert(#o.plages == 1 and o.plages[1].couleur == "orange" and o.plages[1].de == 1 and o.plages[1].a == 10)
+local LONGUE = { [1] = { 5001, "Longue", { M, 1 }, 1, 10, 50 } }
+res = scenario({ rang = 5, curseur = 50, marchands = { [M] = 10 }, recettes = LONGUE })
+local l = etape(res, "Longue")
+local pl = l.plages
+assert(#pl == 3 and pl[1].couleur == "orange" and pl[1].a == 10 and pl[2].couleur == "jaune" and pl[2].a == 30
+  and pl[3].couleur == "vert" and pl[3].de == 30 and pl[3].a == 50, "plages : orange, jaune, vert (30 = milieu)")
+assert(l.fourchette and l.fourchette.bas <= l.fois and l.fois <= l.fourchette.haut, "la fourchette encadre la moyenne")
+-- Surtout vert : incertaine, plus large qu'une étape jaune de même longueur (20 points).
+res = scenario({ rang = 30, curseur = 50, marchands = { [M] = 10 }, recettes = LONGUE })
+local vert = etape(res, "Longue")
+assert(vert.incertaine and #vert.plages == 1 and vert.plages[1].couleur == "vert", "étape verte incertaine")
+res = scenario({ rang = 10, curseur = 30, marchands = { [M] = 10 }, recettes = LONGUE })
+local jaune = etape(res, "Longue")
+assert(not jaune.incertaine and jaune.plages[1].couleur == "jaune", "étape jaune sûre")
+assert(vert.fourchette.haut - vert.fourchette.bas > jaune.fourchette.haut - jaune.fourchette.bas, "le vert est plus large")
+-- Contre la convolution exacte des lois géométriques (la sonde research/montee/variance.lua tire au sort, 10 000 fois) :
+-- à une fabrication près, ici 20 points verts (de 50 % à 10 %).
+local ps = {}
+for s = 30, 49 do ps[#ps + 1] = (50 - s) / 40 end
+local bas, haut = ns.fourchette(ps)
+local d = { [0] = 1 }
+for _, p in ipairs(ps) do
+  local nd = {}
+  for k, v in pairs(d) do local w = p for j = 1, 600 do nd[k + j] = (nd[k + j] or 0) + v * w; w = w * (1 - p); if w < 1e-12 then break end end end
+  d = nd
+end
+local c, eb, eh = 0
+for k = 0, 1000 do c = c + (d[k] or 0); if not eb and c >= 0.1 then eb = k end; if not eh and c >= 0.9 then eh = k end end
+assert(math.abs(bas - eb) <= 1 and math.abs(haut - eh) <= 1, ("fourchette %d-%d, exacte %d-%d"):format(bas, haut, eb, eh))
+print("Maîtrise : plages de couleur et fourchettes OK")
+
 -- La tranche tenue (Maitrise#3) : créer, une seule par perso et métier, progression, recalculer, finir.
 local function rang(r) AzerothCommuneDB.chars[MOI].professions[1].rank = r end
 res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Lame", { M, 2 }, 1, 10, 20 } } })
