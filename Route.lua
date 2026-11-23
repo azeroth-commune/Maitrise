@@ -7,7 +7,8 @@
 local _, ns = ...
 local lib = AzerothCommune
 -- Ce que Maîtrise lit : le socle ne relève que les types auxquels un add-on a souscrit.
-for _, t in ipairs({ "base des recettes", "métiers et compétences", "cours de l'HV", "marchands", "objets" }) do lib:Souscrire(t) end
+-- « maîtres de métier » : la compétence demandée et le prix de chaque recette chez un maître (relevé direct, AzerothCommune#68).
+for _, t in ipairs({ "base des recettes", "métiers et compétences", "cours de l'HV", "marchands", "objets", "maîtres de métier" }) do lib:Souscrire(t) end
 
 local ITERATIONS, DEPART2, PROFONDEUR = 40, 21, 3
 -- Le temps compte aussi : un point à moins de 20 % de chance n'est pas compté pour une recette, sauf si aucune autre ne
