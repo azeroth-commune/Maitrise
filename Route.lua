@@ -10,6 +10,9 @@ local lib = AzerothCommune
 for _, t in ipairs({ "base des recettes", "métiers et compétences", "cours de l'HV", "marchands", "objets" }) do lib:Souscrire(t) end
 
 local ITERATIONS, DEPART2, PROFONDEUR = 40, 21, 3
+-- Le temps compte aussi : un point à moins de 20 % de chance n'est pas compté pour une recette, sauf si aucune autre ne
+-- le couvre (mieux la moins mauvaise qu'un trou).
+local SEUIL = 0.2
 
 -- Les recettes d'un métier que la route peut prendre : une source connue (d'emblée, maître, patron vendu ; « inconnue »
 -- couvre aussi les patrons sous réputation, de l'autre faction ou vendus en donjon, règle du générateur de la réserve),
@@ -81,7 +84,7 @@ function ns.route(rs, achat, revente, FROM, TO)
     marg, memo = {}, {}
     local steps = {}
     for s = FROM, TO - 1 do
-      local best, bk
+      local best, bk, repli, rk -- repli : le meilleur parmi les recettes sous SEUIL, si aucune autre ne couvre le point
       for _, r in ipairs(rs) do
         local p = chance(r, s)
         if p > 0 then
@@ -95,11 +98,13 @@ function ns.route(rs, achat, revente, FROM, TO)
             local v = 0
             if r.o then v = ((need[r.o] or 0) > 0 and (unit(r.o, s, 1) or 0) or revente(r.o)) * r.n end
             local k = (c - v) / p
-            if not bk or k < bk then best, bk = { r = r, crafts = 1 / p }, k end
+            if p < SEUIL then
+              if not rk or k < rk then repli, rk = { r = r, crafts = 1 / p }, k end
+            elseif not bk or k < bk then best, bk = { r = r, crafts = 1 / p }, k end
           end
         end
       end
-      steps[s] = best
+      steps[s] = best or repli
     end
     -- Le flux : ce que la route consomme, ce qu'elle produit, puis fabriquer ou acheter le reste.
     local req, made = {}, {}
