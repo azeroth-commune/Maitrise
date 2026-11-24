@@ -7,8 +7,8 @@ local lib = AzerothCommune
 -- La montée des métiers de récolte et de la Pêche ne s'achète pas (hors du PRD).
 local RECOLTE = { ["Minage"] = true, ["Herboristerie"] = true, ["Dépeçage"] = true, ["Pêche"] = true }
 local nomsDeSession = {}
-local frame, metierB, curseurE, calculB, etatB, resume, tabAchats, vues, frise
-local HAUT = 190 -- sous l'en-tête (réglages, résumé de la tranche) : le haut de la frise et du tableau des achats
+local frame, metierB, curseurE, plafondT, calculB, etatB, resume, tabAchats, vues, frise
+local HAUT = 204 -- sous l'en-tête (réglages, résumé de la tranche) : le haut de la frise et du tableau des achats
 local choix -- le métier choisi
 local res -- la dernière tranche calculée
 
@@ -73,6 +73,46 @@ end
 local function texteApprendre(e)
   return ("Apprendre %s — %s · %s"):format(e.nom, e.source, e.prix and lib.ArgentCourt(e.prix) or "prix inconnu")
 end
+-- Un PNJ où apprendre (ns.endroits) : « Vayn Moongaze, Pitons-du-Tonnerre (45, 60) », la zone d'après la carte du jeu.
+function ns.lieu(m)
+  local i = m.carte and C_Map and C_Map.GetMapInfo(m.carte)
+  local pos = m.x and m.y and (" (%d, %d)"):format(math.floor(m.x + 0.5), math.floor(m.y + 0.5)) or ""
+  return (m.nom or ("PNJ " .. tostring(m.pnj))) .. (i and i.name and (", " .. i.name .. pos) or "")
+end
+local function continent(carte)
+  local i = carte and C_Map.GetMapInfo(carte)
+  while i and (i.mapType or 0) > 2 and (i.parentMapID or 0) > 0 do i = C_Map.GetMapInfo(i.parentMapID) end
+  return i and i.mapID
+end
+-- Le PNJ le plus commode : dans la zone du joueur, sinon sur son continent, sinon le premier placé.
+-- ponytail: pas de distance ; deux PNJ sur le même continent, le premier de la liste.
+function ns.meilleurEndroit(liste)
+  local ici = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+  local c, best = continent(ici), nil
+  for _, m in ipairs(liste) do
+    if m.carte then
+      if m.carte == ici then return m end
+      if not best or (continent(m.carte) == c and continent(best.carte) ~= c) then best = m end
+    end
+  end
+  return best or liste[1]
+end
+-- Clic sur un apprentissage : un point sur la carte du monde (le point suivi du jeu) chez le PNJ le plus commode, et son
+-- nom au chat ; un patron à l'HV : « à l'hôtel des ventes ».
+function ns.surCarte(e, metier)
+  local m = ns.meilleurEndroit(ns.endroits(e, metier))
+  if not m then
+    print("|cffffd100Maîtrise :|r " .. (e.patronHV and "le patron s'achète à l'hôtel des ventes." or "on ne sait pas où l'apprendre."))
+    return
+  end
+  if m.carte and m.x and m.y and C_Map.CanSetUserWaypointOnMap and C_Map.CanSetUserWaypointOnMap(m.carte) then
+    C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(m.carte, m.x / 100, m.y / 100))
+    if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then C_SuperTrack.SetSuperTrackedUserWaypoint(true) end
+    print("|cffffd100Maîtrise :|r point sur la carte : " .. ns.lieu(m))
+  else
+    print("|cffffd100Maîtrise :|r " .. ns.lieu(m))
+  end
+end
 -- Le lien d'un objet : celui du jeu (chargé par la bulle au survol), sinon un lien fait à la main, que Composants lit
 -- aussi bien (il ne regarde que « item:<id> »).
 local function lienObjet(id)
@@ -95,10 +135,15 @@ local function bulle(self)
     return
   end
   if e.apprendre then
-    if e.objetPatron then GameTooltip:SetItemByID(e.objetPatron) else GameTooltip:SetSpellByID(e.cle) end
+    if e.objetPatron then GameTooltip:SetItemByID(e.objetPatron) elseif e.cle then GameTooltip:SetSpellByID(e.cle) else GameTooltip:SetText(e.nom) end
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine(texteApprendre(e), 0.95, 0.65, 0.25)
-    GameTooltip:AddLine("Maj+clic : le lien dans le chat", 0.6, 0.6, 0.6)
+    if ns.appris(e, res.metier) then GameTooltip:AddLine("Appris (vu par Azeroth Commune)", 0.25, 0.8, 0.25) end
+    local ou = ns.endroits(e, res.metier)
+    for i = 1, math.min(3, #ou) do GameTooltip:AddLine(ns.lieu(ou[i]), 0.8, 0.8, 0.8) end
+    if #ou > 3 then GameTooltip:AddLine(("et %d autres"):format(#ou - 3), 0.8, 0.8, 0.8) end
+    GameTooltip:AddLine(#ou > 0 and "Clic : un point sur la carte (ta zone, ton continent d'abord)" or (e.patronHV and "À l'hôtel des ventes" or "Où l'apprendre : inconnu"), 0.6, 0.6, 0.6)
+    if e.cle or e.objetPatron then GameTooltip:AddLine("Maj+clic : le lien dans le chat", 0.6, 0.6, 0.6) end
     if e.objetPatron then GameTooltip:AddLine("Ctrl+clic droit : dans le Brouillon de Composants", 0.6, 0.6, 0.6) end
     GameTooltip:Show()
     return
@@ -111,13 +156,14 @@ local function bulle(self)
   if e.objet then GameTooltip:AddLine("Ctrl+clic droit : dans le Brouillon de Composants", 0.6, 0.6, 0.6) end
   GameTooltip:Show()
 end
-local function clic(self)
+local function clic(self, bouton)
   local e = self:GetParent().etape
+  if e.apprendre and bouton == "LeftButton" and not IsModifierKeyDown() then ns.surCarte(e, res.metier) return end
   -- Un patron (ligne « Apprendre ») ou le produit d'une étape : les clics d'un objet ; sinon (maître, enchantement) le sort.
   local id = e.objetPatron or e.objet or (e.outil and e.objets[1])
   if id then
     HandleModifiedItemClick(lienObjet(id))
-  elseif IsModifiedClick("CHATLINK") then
+  elseif e.cle and IsModifiedClick("CHATLINK") then
     local l = lienSort(e.cle)
     if l then ChatEdit_InsertLink(l) end
   end
@@ -160,6 +206,11 @@ local function cadreEtape(i)
   r.icone:SetScript("OnLeave", function() GameTooltip:Hide() end)
   r.icone:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   r.icone:SetScript("OnClick", clic)
+  -- Un apprentissage fait (vu par le socle) : coché sur sa propre icône.
+  r.coche = r.icone:CreateTexture(nil, "OVERLAY")
+  r.coche:SetSize(20, 20)
+  r.coche:SetPoint("BOTTOMRIGHT", 4, -4)
+  r.coche:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
   r.nom = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   r.nom:SetPoint("TOPLEFT", AXE_X + 14 + ICONE + 10, -7)
   r.nom:SetPoint("RIGHT", -6, 0)
@@ -196,6 +247,25 @@ local function traitsEtape(r, e)
   for i = #(e.plages or {}) + 1, #r.traits do r.traits[i]:Hide() end
 end
 
+-- Une ligne d'apprentissage, cochée quand le socle voit le rang ou la recette appris (relu à chaque majBouton, pas deviné) ;
+-- sinon où l'apprendre (le PNJ le plus commode, ns.endroits).
+local function dessinerApprendre(r, e)
+  local fait = ns.appris(e, res.metier)
+  r.coche:SetShown(fait)
+  r.icone.tex:SetDesaturated(fait)
+  if fait then
+    r.nom:SetText("|cff40c040Appris : " .. e.nom .. "|r")
+    r.detail:SetText("vu par Azeroth Commune")
+    return
+  end
+  r.nom:SetText("|cfff2a640" .. texteApprendre(e) .. "|r")
+  local m = ns.meilleurEndroit(ns.endroits(e, res.metier))
+  r.detail:SetText("à apprendre avant l'étape suivante" .. (m and (" · " .. ns.lieu(m)) or e.patronHV and " · à l'hôtel des ventes" or ""))
+end
+local function cocher()
+  for _, r in ipairs(frise.etapes) do if r.etape and r.etape.apprendre and r:IsShown() then dessinerApprendre(r, r.etape) end end
+end
+
 local function dessinerFrise()
   local etapes = res and ns.etapesFrise(res) or {}
   for i, e in ipairs(etapes) do
@@ -203,6 +273,8 @@ local function dessinerFrise()
     r.etape = e
     r.niveau:SetText((e.apprendre or e.outil) and "" or e.de) -- une ligne « Apprendre » garde sa place sur l'axe, sans répéter le niveau
     r.icone:SetShown(not e.trou and not e.fin)
+    r.coche:Hide()
+    r.icone.tex:SetDesaturated(false)
     traitsEtape(r, e)
     if e.outil then
       r.point:SetColorTexture(0.85, 0.85, 0.85, 0.7)
@@ -212,8 +284,7 @@ local function dessinerFrise()
     elseif e.apprendre then
       r.point:SetColorTexture(0.85, 0.85, 0.85, 0.7) -- un tiret neutre, comme une étape : l'axe garde les couleurs des recettes
       r.icone.tex:SetTexture("Interface\\Icons\\INV_Misc_Book_11")
-      r.nom:SetText("|cfff2a640" .. texteApprendre(e) .. "|r")
-      r.detail:SetText("à apprendre avant l'étape suivante")
+      dessinerApprendre(r, e)
     elseif e.trou then
       r.point:SetColorTexture(0.9, 0.3, 0.3, 1)
       r.nom:SetText("|cffff9933Aucune recette de source connue|r")
@@ -257,7 +328,7 @@ end
 -- La frise et le tableau des achats démarrent juste sous la dernière ligne de l'en-tête : sans avertissement, pas de vide
 -- réservé (retour de Virgile, captures du 23/11). haut = hauteur des avertissements écrits (0 sans).
 local function placerContenu(haut)
-  local y = 136 + haut + 8
+  local y = 150 + haut + 8
   frise.scroll:ClearAllPoints()
   frise.scroll:SetPoint("TOPLEFT", 14, -y)
   frise.scroll:SetPoint("BOTTOMRIGHT", -32, 14)
@@ -313,6 +384,7 @@ local function majBouton()
   frame.title:SetText(e and ("Maîtrise · tranche %s"):format(e.texte) or "Maîtrise")
   etatB:SetText(e and "Mettre à jour le projet" or "En faire un projet")
   etatB:SetEnabled(res ~= nil and res.metier == choix)
+  if res then cocher() end
 end
 
 local function bulleTranche(self)
@@ -351,6 +423,7 @@ local function calculer()
   if not choix then return end
   local r, err = ns.tranche(nil, choix, tonumber(curseurE:GetText()))
   if not r then print("|cffffd100Maîtrise :|r " .. err) return end
+  curseurE:SetText(tostring(r.a)) -- ramené au plafond du personnage s'il le dépassait
   afficher(r)
   majBouton()
 end
@@ -360,7 +433,9 @@ local function choisir(nom)
   if metierB then metierB:GenerateMenu() end -- choisi sans passer par le menu (à l'ouverture) : son texte suit
   local rang = rangDe(nom) or 0
   local t = ns.trancheDe(nom)
-  curseurE:SetText(tostring(t and t.a or math.min(rang + 10, 300)))
+  local plafond, raison = ns.plafondDe()
+  curseurE:SetText(tostring(t and math.min(t.a, plafond) or math.min(rang + 10, plafond)))
+  plafondT:SetText(raison or "")
   dessinerFrise()
   tabAchats:SetData({})
   ecrireResume()
@@ -389,6 +464,9 @@ local function construire()
   curseurE:SetNumeric(true)
   curseurE:SetMaxLetters(3)
   curseurE:SetScript("OnEnterPressed", function(self) self:ClearFocus(); calculer() end)
+  -- Le plafond du curseur au niveau du personnage (Maitrise#4), écrit sous lui : « 225 max : Artisan au niveau 35 ».
+  plafondT = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  plafondT:SetPoint("TOPLEFT", curseurE, "BOTTOMLEFT", -4, -3)
   calculB = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
   calculB:SetSize(100, 22)
   calculB:SetPoint("LEFT", curseurE, "RIGHT", 12, 0)
@@ -413,11 +491,11 @@ local function construire()
     t:SetSpacing(3)
     resume[nom] = t
   end
-  texte("titre", 16, -70, true)
-  texte("gauche", 16, -88)
+  texte("titre", 16, -84, true)
+  texte("gauche", 16, -102)
   resume.gauche:SetWidth(280) -- une largeur pour chaque colonne : sans elle, la ligne la plus longue est coupée
-  texte("droite", 300, -88, true)
-  texte("avert", 16, -136, true)
+  texte("droite", 300, -102, true)
+  texte("avert", 16, -150, true)
 
   vues = {}
   for i = 1, 2 do

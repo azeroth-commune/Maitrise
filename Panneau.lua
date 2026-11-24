@@ -18,13 +18,13 @@ local COULEURS = { orange = { 1, 0.5, 0.15 }, jaune = { 1, 0.82, 0 }, vert = { 0
 -- Les lignes du panneau (pure : check.lua) d'après les étapes gardées de la tranche, à la compétence s : { etape, etat
 -- (« passee », « courante », « avenir »), couleur (de la recette à s, seuils du client lus dans base, la base des recettes
 -- du socle ; nil pour un trou, un apprentissage ou une recette pas encore à portée), nom, droite (« 166–172 ×7 ») }.
--- Un apprentissage est passé quand connue(clé) le dit (lu dans le jeu, pas deviné), à faire dès son niveau atteint.
+-- Un apprentissage est passé quand connue(étape) le dit (lu dans le jeu, pas deviné), à faire dès son niveau atteint.
 function ns.lignesPanneau(etapes, s, base, connue)
   local out = {}
   for _, e in ipairs(etapes) do
     local l = { etape = e }
     if e.apprendre then
-      l.etat = connue(e.cle) and "passee" or (s >= e.de and "courante" or "avenir")
+      l.etat = connue(e) and "passee" or (s >= e.de and "courante" or "avenir")
       l.nom = "Apprendre " .. (e.nom or "?")
       l.droite = e.prix and lib.ArgentCourt(e.prix) or "prix ?"
     else
@@ -55,8 +55,13 @@ local function metierOuvert()
   return p and p.professionName ~= "" and p.professionName or nil, p and p.skillLevel
 end
 
-local function connue(cle)
-  local i = C_TradeSkillUI.GetRecipeInfo(cle)
+-- Un apprentissage fait, lu dans la fenêtre de métier : un rang, quand son plafond est atteint ; une recette, apprise.
+local function connue(e)
+  if e.rang then
+    local p = C_TradeSkillUI.GetBaseProfessionInfo()
+    return p and (p.maxSkillLevel or 0) >= e.rang
+  end
+  local i = C_TradeSkillUI.GetRecipeInfo(e.cle)
   return i and i.learned
 end
 
@@ -70,10 +75,12 @@ local function bulle(self)
   if e.trou then
     GameTooltip:AddLine(("Aucune recette de source connue de %d à %d"):format(e.de, e.a), 1, 0.6, 0.2)
   elseif e.apprendre then
-    if e.objetPatron then GameTooltip:SetItemByID(e.objetPatron) else GameTooltip:SetSpellByID(e.cle) end
+    if e.objetPatron then GameTooltip:SetItemByID(e.objetPatron) elseif e.cle then GameTooltip:SetSpellByID(e.cle) else GameTooltip:SetText(e.nom or "?") end
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine(("Apprendre %s — %s · %s"):format(e.nom or "?", e.source or "?", e.prix and lib.ArgentCourt(e.prix) or "prix inconnu"), 0.95, 0.65, 0.25)
-    GameTooltip:AddLine("Maj+clic : le lien dans le chat", 0.6, 0.6, 0.6)
+    local m = ns.meilleurEndroit(ns.endroits(e, metierOuvert()))
+    if m then GameTooltip:AddLine(ns.lieu(m), 0.8, 0.8, 0.8) end
+    GameTooltip:AddLine("Clic : un point sur la carte · Maj+clic : le lien dans le chat", 0.6, 0.6, 0.6)
   else
     if e.objet then GameTooltip:SetItemByID(e.objet) else GameTooltip:SetSpellByID(e.cle) end
     GameTooltip:AddLine(" ")
@@ -92,11 +99,13 @@ local function clic(self, bouton)
     local id = e.objetPatron or e.objet
     if id then
       HandleModifiedItemClick(lien(id, e.nom))
-    elseif IsModifiedClick("CHATLINK") then
+    elseif e.cle and IsModifiedClick("CHATLINK") then
       local l = C_Spell.GetSpellLink(e.cle)
       if l then ChatEdit_InsertLink(l) end
     end
-  elseif bouton == "LeftButton" and not e.apprendre and connue(e.cle) then
+  elseif bouton == "LeftButton" and e.apprendre then
+    ns.surCarte(e, metierOuvert())
+  elseif bouton == "LeftButton" and connue(e) then
     C_TradeSkillUI.OpenRecipe(e.cle)
   end
 end

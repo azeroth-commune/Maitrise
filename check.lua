@@ -36,7 +36,7 @@ local function scenario(t)
   local r = {}
   for k, x in pairs(t.recettes) do
     r[k] = { x[1], 1, 1, "Forge", x[2], x[3], x[4], x[5], x[6], x[7] or "maître", "source externe", x[8] or 0, x[9] or 0, x[10], x[11],
-      nil, nil, nil, t.temps and t.temps[k], t.outils and t.outils[k] }
+      t.marchandsPatron and t.marchandsPatron[k], nil, nil, t.temps and t.temps[k], t.outils and t.outils[k] }
   end
   acns.recettesClassic, acns.recettesOutils = r, t.tableOutils
   local items = {}
@@ -51,10 +51,12 @@ local function scenario(t)
   AzerothCommuneDB.vendors = { [1] = { items = v } }
   AzerothCommuneItems.items = {}
   for id, prix in pairs(t.revente or {}) do AzerothCommuneItems.items[id] = { name = "#" .. id, price = prix } end
-  AzerothCommuneDB.chars = { [MOI] = { nom = "Moi Dupont", professions = { { name = "Forge", rank = t.rang, max = 300 } },
+  AzerothCommuneDB.chars = { [MOI] = { nom = "Moi Dupont", professions = { { name = "Forge", rank = t.rang, max = t.max or 300 } },
     recipes = t.connues and { Forge = { rank = t.rang, max = 300, known = t.connues } } or nil } }
   AzerothCommuneDB.chars[MOI].bags = t.sacs
+  AzerothCommuneDB.chars[MOI].character = t.niveau and { level = t.niveau }
   AzerothCommuneDB.trainers = t.maitres
+  if t.refus then return Maitrise.Tranche(nil, "Forge", t.curseur) end
   return assert(Maitrise.Tranche(nil, "Forge", t.curseur))
 end
 local function achat(res, id)
@@ -310,6 +312,73 @@ AzerothCommuneDB.trainers = nil
 assert(res.apprentissages[1] and res.apprentissages[1].prix == 0, "prix de maître relevé à 0 : connu")
 print("Maîtrise : apprentissages (niveau, source, prix, connues exclues) OK")
 
+-- Le curseur plafonné par le rang que le personnage peut débloquer à son niveau (Maitrise#4) : Compagnon au niveau 10,
+-- Expert au 20, Artisan au 35 ; la raison est rendue. Niveau pas relevé : pas de plafond deviné (300).
+local LAME = { [1] = { 5001, "Lame", { M, 1 }, 1, 400, 401, "d'emblée" } } -- orange de 1 à 400, connue d'emblée
+res = scenario({ rang = 140, max = 150, niveau = 25, curseur = 260, marchands = { [M] = 10 }, recettes = LAME })
+assert(res.a == 225 and res.plafond == 225 and res.raisonPlafond == "225 max : Artisan au niveau 35", res.a .. " " .. tostring(res.raisonPlafond))
+res = scenario({ rang = 140, max = 150, niveau = 35, curseur = 260, marchands = { [M] = 10 }, recettes = LAME })
+assert(res.a == 260 and res.raisonPlafond == nil, "niveau 35 : pas de plafond sous 300")
+res = scenario({ rang = 140, max = 150, curseur = 260, marchands = { [M] = 10 }, recettes = LAME })
+assert(res.a == 260, "niveau pas relevé : rien de deviné")
+pas, pourquoi = scenario({ rang = 75, max = 75, niveau = 8, curseur = 80, marchands = { [M] = 10 }, recettes = LAME, refus = true })
+assert(pas == nil and pourquoi == "75 max : Compagnon au niveau 10", tostring(pourquoi))
+assert(select(2, ns.plafondDe()) == "75 max : Compagnon au niveau 10" and ns.plafondDe() == 75)
+
+-- Les rangs à apprendre (Maitrise#4) : de 60 (plafond 75) à 160, Compagnon (dès 60, le maître l'enseigne à 50) et Expert (à 125),
+-- au prix relevé chez le maître (le moins cher ; un service du métier sans objet, à la compétence du rang) ; compté dans le total.
+local MAITRES_RANG = { [1] = { services = {
+  { name = "Forge de compagnon", skill = "Forge", skill_rank = 50, cost = 500 },
+  { name = "Minage de compagnon", skill = "Minage", skill_rank = 50, cost = 1 },
+  { name = "Gilet de compagnon", skill = "Forge", skill_rank = 50, cost = 2, item = 2957 } } },
+  [2] = { services = { { name = "Forge de compagnon", skill = "Forge", skill_rank = 50, cost = 450 } } } }
+res = scenario({ rang = 60, max = 75, niveau = 25, curseur = 160, marchands = { [M] = 10 }, recettes = LAME, maitres = MAITRES_RANG })
+local rangs = {}
+for _, a in ipairs(res.apprentissages) do if a.rang then rangs[#rangs + 1] = a end end
+assert(#rangs == 2 and rangs[1].nom == "Compagnon (150)" and rangs[1].rang == 150 and rangs[1].niveau == 60 and rangs[1].source == "Maître"
+  and rangs[1].prix == 450, "Compagnon à 60, 450 : " .. tostring(rangs[1] and rangs[1].prix))
+assert(rangs[2].nom == "Expert (225)" and rangs[2].niveau == 125 and rangs[2].prix == nil, "Expert à 125, pas relevé : prix inconnu")
+assert(res.patrons == 450 and res.total == res.totalAchats + 450 and res.net == res.total - res.revente, "le prix du rang compte : " .. res.patrons)
+local fr = {}
+for _, e in ipairs(ns.etapesFrise(res)) do if e.apprendre then fr[#fr + 1] = e.de .. " " .. e.nom end end
+assert(table.concat(fr, ", ") == "60 Compagnon (150), 125 Expert (225)", "à leur place dans la frise : " .. table.concat(fr, ", "))
+local tr = assert(ns.trancheCreer("Forge", res))
+assert(tr.etapes[1].rang == 150 and tr.etapes[1].apprendre, "le rang gardé avec la tranche (panneau)")
+Composants.Supprimer(select(2, ns.trancheDe("Forge")).id)
+assert(ns.trancheDe("Forge") == nil)
+res = scenario({ rang = 60, max = 150, niveau = 25, curseur = 140, marchands = { [M] = 10 }, recettes = LAME, maitres = MAITRES_RANG })
+assert(#res.apprentissages == 0 and res.patrons == 0, "rang déjà appris (plafond relevé à 150) : rien à apprendre")
+AzerothCommuneDB.trainers = nil
+-- Les patrons comptent dans le total (le prix des recettes à apprendre aussi) : B, patron vendu à 300, et le maître de A à 500.
+res = scenario({ rang = 1, curseur = 30, marchands = { [M] = 10 }, recettes = RP, maitres = MAITRE })
+assert(res.patrons == 800 and res.total == res.totalAchats + 800, "patrons comptés dans le total : " .. res.total)
+AzerothCommuneDB.trainers = nil
+
+-- Coché tout seul (Maitrise#4) : un apprentissage est fait quand le socle voit la recette connue, ou le plafond du rang.
+res = scenario({ rang = 1, curseur = 30, marchands = { [M] = 10 }, recettes = RP, connues = {} })
+local B = res.apprentissages[2]
+assert(B.nom == "B" and not ns.appris(B, "Forge"), "B pas encore apprise")
+AzerothCommuneDB.chars[MOI].recipes.Forge.known[2] = true -- le socle relève B connue (fenêtre de métier, connexion)
+assert(ns.appris(B, "Forge"), "B vue connue par le socle : cochée")
+AzerothCommuneDB.chars[MOI].professions[1].max = 75
+assert(not ns.appris({ rang = 150 }, "Forge"), "Compagnon pas encore : plafond 75")
+AzerothCommuneDB.chars[MOI].professions[1].max = 150
+assert(ns.appris({ rang = 150 }, "Forge"), "Compagnon appris : plafond relevé à 150")
+
+-- Où apprendre (Maitrise#4, AzerothCommune#80) : les marchands du patron, les maîtres du métier pour un rang ou une recette de
+-- maître, ceux de la faction du joueur ou des deux ; rien pour un patron à l'HV.
+acns.recettesPNJ = { [11] = { "Vayn", 1453, 45, 60, "Alliance" }, [12] = { "Grak", 1454, 10, 20, "Horde" }, [13] = { "Neutre", 1446, 5, 5 } }
+acns.recettesMaitres = { Forge = { 11, 12 } }
+res = scenario({ rang = 1, curseur = 30, marchands = { [M] = 10 }, recettes = RP, maitres = MAITRE, marchandsPatron = { [2] = { 12, 300, 13, 300 } } })
+local ouB = ns.endroits(res.apprentissages[2], "Forge")
+assert(#ouB == 1 and ouB[1].nom == "Neutre" and ouB[1].carte == 1446, "patron vendu : son marchand de la faction ou des deux")
+local ouA = ns.endroits(res.apprentissages[1], "Forge")
+assert(#ouA == 1 and ouA[1].nom == "Vayn" and ouA[1].x == 45, "maître : ceux du métier, de la faction")
+assert(#ns.endroits({ rang = 150, source = "Maître" }, "Forge") == 1 and #ns.endroits({ patronHV = true, cle = 2 }, "Forge") == 0)
+acns.recettesPNJ, acns.recettesMaitres = nil, nil
+AzerothCommuneDB.trainers = nil
+print("Maîtrise : à apprendre (rangs, prix, endroits, coché par le socle) et curseur plafonné par le niveau OK")
+
 -- La tranche tenue (Maitrise#3) : créer, une seule par perso et métier, progression, recalculer, finir.
 local function rang(r) AzerothCommuneDB.chars[MOI].professions[1].rank = r end
 res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Lame", { M, 2 }, 1, 10, 20 } } })
@@ -378,7 +447,7 @@ assert(t.etapes[2].fois == 9 and t.etapes[2].objet == 5001 and t.etapes[2].cle =
   and t.etapes[3].source == "Patron" and not t.etapes[2].composants, "ce qui est gardé : niveaux, fois, objet, prix, source ; pas les composants")
 local base = AzerothCommune:Lire("base des recettes")
 local connues = { [1] = true }
-local function lp(s) return ns.lignesPanneau(t.etapes, s, base, function(k) return connues[k] end) end
+local function lp(s) return ns.lignesPanneau(t.etapes, s, base, function(e) return connues[e.cle] end) end
 local function resume(ls)
   local o = {}
   for _, l in ipairs(ls) do o[#o + 1] = l.etat .. ":" .. tostring(l.couleur) end

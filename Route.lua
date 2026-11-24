@@ -393,6 +393,70 @@ function ns.metiers(guid)
   return out
 end
 
+-- Les rangs (Maitrise#4) : le plafond du métier qu'ils ouvrent, le niveau du personnage qu'ils demandent (règle de Classic,
+-- celle de l'issue : le relevé des maîtres donne level = 0 pour ces services), la compétence pour les apprendre (skill_rank
+-- relevé chez les maîtres : 50, 125, 200) et le mot de leur nom chez le maître (« Minage de compagnon »).
+local RANGS = { { nom = "Compagnon", max = 150, niveau = 10, req = 50, mot = "compagnon" },
+  { nom = "Expert", max = 225, niveau = 20, req = 125, mot = "expert" },
+  { nom = "Artisan", max = 300, niveau = 35, req = 200, mot = "artisan" } }
+
+-- Le plafond que le personnage (GUID, nil = le connecté) peut débloquer à son niveau (relevé par le socle : inventaires),
+-- et la raison quand il est sous 300 (« 225 max : Artisan au niveau 35 ») ; niveau pas relevé : 300, on ne devine rien.
+function ns.plafondDe(guid)
+  local inv = lib:Lire("inventaires", guid)
+  local _, f = next(inv and inv.persos or {})
+  local niv = f and f.character and f.character.level
+  if not niv then return 300 end
+  local max = 75
+  for _, r in ipairs(RANGS) do
+    if niv < r.niveau then return max, ("%d max : %s au niveau %d"):format(max, r.nom, r.niveau) end
+    max = r.max
+  end
+  return 300
+end
+
+-- Le prix d'un rang chez les maîtres relevés (le moins cher) : le service du métier, sans objet, à la compétence du rang,
+-- dont le nom porte le mot du rang ; nil : aucun maître relevé ne l'enseigne (prix inconnu).
+local function prixRang(metier, r)
+  local best
+  for _, m in pairs(lib:Lire("maîtres de métier") or {}) do
+    for _, s in ipairs(m.services or {}) do
+      if s.skill == metier and not s.item and s.skill_rank == r.req and s.cost and tostring(s.name):lower():find(r.mot, 1, true)
+        and (not best or s.cost < best) then best = s.cost end
+    end
+  end
+  return best
+end
+
+-- Un apprentissage (rang ou recette) est-il fait, d'après le socle seul : un rang, quand le plafond relevé du métier
+-- (« métiers et compétences ») l'atteint ; une recette, quand le socle la voit connue (« recettes connues »).
+function ns.appris(e, metier, guid)
+  if e.rang then
+    for _, m in ipairs(ns.metiers(guid)) do if m.nom == metier then return (m.max or 0) >= e.rang end end
+    return false
+  end
+  local rc = lib:Lire("recettes connues", guid)
+  local _, mp = next(rc and rc.persos or {})
+  local k = mp and mp[metier] and mp[metier].known
+  return k ~= nil and k[e.cle] ~= nil
+end
+
+-- Où apprendre : les PNJ de la faction du joueur (ou des deux), { { pnj, nom, carte, x, y, faction } } d'après le socle :
+-- les maîtres du métier pour un rang ou une recette de maître, les marchands du patron pour un patron vendu (AzerothCommune#80) ;
+-- vide pour un patron à l'HV (il s'achète à l'hôtel des ventes) ou sans PNJ connu.
+function ns.endroits(e, metier)
+  if e.patronHV then return {} end
+  local liste
+  if e.rang or e.source == "Maître" then liste = lib.MaitresDuMetier(metier)
+  else
+    local r = (lib:Lire("base des recettes") or {})[e.cle]
+    liste = r and r.marchands
+  end
+  local out, f = {}, lib.Faction()
+  for _, m in ipairs(liste or {}) do if not m.faction or m.faction == f then out[#out + 1] = m end end
+  return out
+end
+
 -- La tranche (personnage, métier, curseur) : la route du niveau actuel au curseur, aux prix du moment (socle). Rend
 -- { de, a, fabrications = { { de, a, cle (le sort de la recette), nom, fois, patron, patronHV (le patron vient de l'HV), objet (nil : enchantement), n (produits
 -- par fabrication), composants = { { id, qty } }, plages = { { de, a, couleur (« orange », « jaune », « vert ») } }, fourchette
@@ -401,7 +465,9 @@ end
 -- total, revente, trous = { { de, a } }, sansPrix = { id… }, incomplet, scan (date lisible du dernier scan de l'HV, nil
 -- sans), sansHV (aucun cours de l'HV : marchands seuls), net (total − revente), netUneSurDix (le net au 90e centile,
 -- estimation prudente : voir ns.route), apprentissages = { { niveau, cle, nom, source (« Maître », « Patron », « Patron à l'HV »), prix
--- (nil : inconnu), objetPatron } } (les recettes à apprendre, à leur niveau ; sans les connues) } ; chaque fabrication porte
+-- (nil : inconnu), objetPatron, rang (le plafond qu'ouvre un rang : Compagnon, Expert, Artisan ; nil pour une recette) } }
+-- (les recettes et les rangs à apprendre, à leur niveau ; sans les connus), plafond, raisonPlafond (le curseur est ramené au
+-- plafond débloquable au niveau du personnage : ns.plafondDe) } ; chaque fabrication porte
 -- aussi net (composants − revente du produit, par fabrication, en cuivre), temps (secondes : fabrications × temps
 -- d'incantation, AzerothCommune#70 ; nil : inconnu, recette vue absente de la réserve) et outils (voir ns.outils) ; temps =
 -- la somme des étapes connues, tempsIncomplet = true si l'une ne l'est pas ; outils = voir ns.outils }, ou
@@ -409,11 +475,16 @@ end
 -- ponytail: le stock n'entre pas dans la route (tout acheté) ; Composants le déduit dans les Besoins du projet de
 -- tranche (Maitrise#3).
 function ns.tranche(guid, metier, curseur)
-  local rang
-  for _, m in ipairs(ns.metiers(guid)) do if m.nom == metier then rang = m.rang end end
+  local rang, max
+  for _, m in ipairs(ns.metiers(guid)) do if m.nom == metier then rang, max = m.rang, m.max end end
   if not rang then return nil, ("%s : métier pas relevé pour ce personnage"):format(tostring(metier)) end
+  -- Le curseur s'arrête au plafond que le personnage peut débloquer à son niveau (Maitrise#4).
+  local plafond, raison = ns.plafondDe(guid)
   curseur = tonumber(curseur)
-  if not curseur or curseur <= rang then return nil, ("le curseur doit dépasser la compétence actuelle (%d)"):format(rang) end
+  if curseur and curseur > plafond then curseur = plafond end
+  if not curseur or curseur <= rang then
+    return nil, curseur == plafond and raison or ("le curseur doit dépasser la compétence actuelle (%d)"):format(rang)
+  end
   local base = lib:Lire("base des recettes")
   if not base then return nil, "base des recettes pas encore relevée" end
   local hv, lotHV = lib:Lire("cours de l'HV")
@@ -437,6 +508,19 @@ function ns.tranche(guid, metier, curseur)
   local function prixPatron(id) return (lib:PrixAchat(id, 1, lignes, {})) end
   local res = ns.route(ns.recettesDuMetier(base, metier, connues, prixPatron), achat, revente, rang, curseur)
   res.connuesLues = connues ~= nil -- sans relevé, toute recette de la route est listée à apprendre
+  -- Les rangs à apprendre (Maitrise#4) : chacun dont la tranche dépasse le plafond d'avant et que le métier n'a pas encore
+  -- (max relevé), au niveau où le maître l'enseigne (pas avant la compétence actuelle) ; son prix compte avec les patrons.
+  for _, r in ipairs(RANGS) do
+    if max and r.max > max and r.max - 75 < curseur then
+      local prix = prixRang(metier, r)
+      res.apprentissages[#res.apprentissages + 1] = { niveau = math.max(rang, r.req), rang = r.max,
+        nom = ("%s (%d)"):format(r.nom, r.max), source = "Maître", prix = prix }
+      if prix then
+        res.patrons, res.total, res.net, res.netUneSurDix = res.patrons + prix, res.total + prix, res.net + prix, res.netUneSurDix + prix
+      end
+    end
+  end
+  res.plafond, res.raisonPlafond = plafond, raison
   local inv = lib:Lire("inventaires", guid)
   local _, fiche = next(inv and inv.persos or {})
   ns.outils(res, fiche)
