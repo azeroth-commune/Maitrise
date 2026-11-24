@@ -404,3 +404,70 @@ test("Maîtrise : rangs à apprendre, cochés par le socle, curseur plafonné pa
     if MaitriseFrame then MaitriseFrame:Hide() end
     if not ok then error(err, 0) end
 end)
+
+-- Un autre de mes personnages (Maitrise#5) : deux personnages dans les données du socle ; le connecté est choisi par défaut,
+-- l'autre se choisit dans le même menu, sa tranche part de sa compétence relevée et son curseur est plafonné par son niveau.
+test("Maîtrise : préparer la montée d'un autre de mes personnages", function()
+    local guid, AUTRE = UnitGUID("player"), "Player-6942-0000ABCD"
+    local fiche = AzerothCommuneDB.chars[guid]
+    local garde = fiche.character
+    local ok, err = pcall(function()
+        fiche.professions = { { name = "Forge", rank = 1, max = 300 } }
+        fiche.character = { level = 60 }
+        AzerothCommuneDB.chars[AUTRE] = { nom = "Riwanon Kerys", professions = { { name = "Forge", rank = 49, max = 75 },
+            { name = "Dépeçage", rank = 100, max = 150 } }, character = { level = 19, faction = AzerothCommune.Faction() } }
+        AzerothCommuneMarket[AzerothCommune.MaisonHV()] = { scanned = "22/11 21:00", time = time(), items = {
+            [2840] = { tiers = { { price = 40, qty = 2000 } } }, [2835] = { tiers = { { price = 10, qty = 2000 } } },
+            [2836] = { tiers = { { price = 20, qty = 2000 } } }, [2841] = { tiers = { { price = 80, qty = 2000 } } } } }
+        MaitriseDB = nil
+        if MaitriseFrame then MaitriseFrame:Hide() end
+        SlashCmdList.MAITRISE("")
+        local dd = enfants(MaitriseFrame, function(c) return c.GenerateMenu and c.GetMenuDescription end)[1]
+        local function texte() return dd.Text and dd.Text:GetText() or dd:GetText() end
+        dd:GenerateMenu()
+        -- Le menu : les métiers du connecté, puis ceux de l'autre (sans la récolte).
+        local entrees = {}
+        for _, e in dd:GetMenuDescription():EnumerateElementDescriptions() do entrees[#entrees + 1] = MenuUtil.GetElementText(e) or "" end
+        local tout = table.concat(entrees, " | ")
+        assertTrue(tout:find("Forge (1)", 1, true) ~= nil and tout:find("Riwanon · Forge (49)", 1, true) ~= nil, tout)
+        assertTrue(tout:find("Dépeçage", 1, true) == nil, "pas de métier de récolte : " .. tout)
+        -- Le connecté est choisi par défaut (la fenêtre garde le métier choisi d'un test à l'autre, jamais un autre personnage).
+        assertEquals("Forge (1)", texte(), "le personnage connecté par défaut")
+        for _, e in dd:GetMenuDescription():EnumerateElementDescriptions() do
+            if MenuUtil.GetElementText(e) == "Riwanon · Forge (49)" then dd:Pick(e, MenuInputContext.MouseButton, "LeftButton") end
+        end
+        assertEquals("Riwanon · Forge (49)", texte())
+        local curseur = enfants(MaitriseFrame, function(c) return c:GetObjectType() == "EditBox" end)[1]
+        assertEquals("59", curseur:GetText(), "curseur de Riwanon : 49 + 10")
+        local regions = {}
+        for _, rg in ipairs({ MaitriseFrame:GetRegions() }) do if rg.GetText and rg:GetText() and rg:IsShown() then regions[#regions + 1] = rg:GetText() end end
+        assertTrue(table.concat(regions, "\n"):find("150 max : Expert au niveau 20", 1, true) ~= nil, "son plafond, par son niveau")
+        curseur:SetText("200")
+        bouton("Calculer"):Click()
+        assertEquals("150", curseur:GetText(), "plafonné par le niveau de Riwanon")
+        local res = assert(Maitrise.Tranche(AUTRE, "Forge", 200))
+        assertEquals(49, res.de)
+        assertEquals(150, res.a)
+        bouton("En faire un projet"):Click()
+        if ComposantsFrame then ComposantsFrame:Hide() end
+        assertNotNil(MaitriseDB.tranches[AUTRE] and MaitriseDB.tranches[AUTRE].Forge, "la tranche tenue au nom de Riwanon")
+        assertNil(MaitriseDB.tranches[guid] and MaitriseDB.tranches[guid].Forge, "pas celle du connecté")
+        local p
+        for _, x in ipairs(Composants.Projets()) do if x.tenu == "Maîtrise : Riwanon, Forge de 49 à 150" then p = x end end
+        assertNotNil(p, "le projet dit pour qui")
+        assertEquals("Maîtrise · tranche Riwanon, Forge 49 / 150", MaitriseFrame.title:GetText())
+        -- Revenir au connecté : son métier, sans tranche.
+        dd:GenerateMenu()
+        for _, e in dd:GetMenuDescription():EnumerateElementDescriptions() do
+            if MenuUtil.GetElementText(e) == "Forge (1)" then dd:Pick(e, MenuInputContext.MouseButton, "LeftButton") end
+        end
+        assertEquals("Forge (1)", texte())
+        assertEquals("Maîtrise", MaitriseFrame.title:GetText(), "le connecté n'a pas de tranche")
+        Composants.Supprimer(p.id)
+    end)
+    fiche.character = garde
+    AzerothCommuneDB.chars[AUTRE] = nil
+    if MaitriseFrame then MaitriseFrame:Hide() end
+    if ComposantsFrame then ComposantsFrame:Hide() end
+    if not ok then error(err, 0) end
+end)

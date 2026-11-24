@@ -443,8 +443,9 @@ end
 
 -- Où apprendre : les PNJ de la faction du joueur (ou des deux), { { pnj, nom, carte, x, y, faction } } d'après le socle :
 -- les maîtres du métier pour un rang ou une recette de maître, les marchands du patron pour un patron vendu (AzerothCommune#80) ;
--- vide pour un patron à l'HV (il s'achète à l'hôtel des ventes) ou sans PNJ connu.
-function ns.endroits(e, metier)
+-- vide pour un patron à l'HV (il s'achète à l'hôtel des ventes) ou sans PNJ connu. guid : le personnage (nil = le connecté),
+-- dont la faction est relevée par le socle ; pas relevée : tous les PNJ (on ne devine pas).
+function ns.endroits(e, metier, guid)
   if e.patronHV then return {} end
   local liste
   if e.rang or e.source == "Maître" then liste = lib.MaitresDuMetier(metier)
@@ -452,8 +453,14 @@ function ns.endroits(e, metier)
     local r = (lib:Lire("base des recettes") or {})[e.cle]
     liste = r and r.marchands
   end
-  local out, f = {}, lib.Faction()
-  for _, m in ipairs(liste or {}) do if not m.faction or m.faction == f then out[#out + 1] = m end end
+  local f = lib.Faction()
+  if guid and guid ~= UnitGUID("player") then
+    local inv = lib:Lire("inventaires", guid)
+    local _, fi = next(inv and inv.persos or {})
+    f = fi and fi.character and fi.character.faction
+  end
+  local out = {}
+  for _, m in ipairs(liste or {}) do if not m.faction or not f or m.faction == f then out[#out + 1] = m end end
   return out
 end
 
@@ -524,7 +531,7 @@ function ns.tranche(guid, metier, curseur)
   local inv = lib:Lire("inventaires", guid)
   local _, fiche = next(inv and inv.persos or {})
   ns.outils(res, fiche)
-  res.metier = metier
+  res.metier, res.guid = metier, guid or UnitGUID("player")
   res.scan = hv and lotHV and lotHV.scan and lotHV.scan.scanned
   res.fournisseur = hv and lotHV and lotHV.fournisseur
   res.sansHV = not hv
