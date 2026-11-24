@@ -38,7 +38,9 @@ end
 
 -- Les lignes de la frise d'une route res (ns.tranche), dans l'ordre : ses fabrications, ses trous ({ de, a, trou }) et ses
 -- apprentissages ({ de = niveau, apprendre, … }) à leur niveau, avant l'étape qui les demande (même niveau :
--- l'apprentissage d'abord), puis l'objectif ({ de = res.a, fin }). La frise de la fenêtre et le panneau les montrent.
+-- l'apprentissage d'abord), les outils qui manquent ({ de = niveau, outil, nom, objets, inconnu : sacs pas relevés },
+-- AzerothCommune#71) comme eux, puis l'objectif ({ de = res.a, fin }). La frise de la fenêtre et le panneau les montrent
+-- (le panneau sans les outils : la tranche ne les garde pas).
 function ns.etapesFrise(res)
   local etapes = {}
   for _, f in ipairs(res.fabrications) do etapes[#etapes + 1] = f end
@@ -49,10 +51,15 @@ function ns.etapesFrise(res)
     l.de, l.apprendre = a.niveau, true
     etapes[#etapes + 1] = l
   end
+  -- Un outil qui manque (AzerothCommune#71) : une ligne « Outil » au niveau de sa première étape, comme un apprentissage.
+  for _, o in ipairs(res.outils or {}) do
+    if not o.a then etapes[#etapes + 1] = { de = o.niveau, outil = true, nom = o.nom, objets = o.objets, inconnu = o.a == nil } end
+  end
   for i, e in ipairs(etapes) do e.ordre = i end
   table.sort(etapes, function(x, y)
     if x.de ~= y.de then return x.de < y.de end
-    if (x.apprendre or false) ~= (y.apprendre or false) then return x.apprendre or false end
+    local ax, ay = x.apprendre or x.outil or false, y.apprendre or y.outil or false
+    if ax ~= ay then return ax end
     return x.ordre < y.ordre
   end)
   etapes[#etapes + 1] = { de = res.a, fin = true }
@@ -71,7 +78,7 @@ local function tenir(p, metier, res, curseur)
   db().tranches[g] = db().tranches[g] or {}
   local etapes = {}
   for _, e in ipairs(ns.etapesFrise(res)) do
-    if not e.fin then
+    if not e.fin and not e.outil then
       local l = {}
       for _, k in ipairs(GARDE) do l[k] = e[k] end
       etapes[#etapes + 1] = l

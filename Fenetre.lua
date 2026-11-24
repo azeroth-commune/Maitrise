@@ -41,6 +41,22 @@ local COL_ACHATS = {
 local ETAPE_H, AXE_X, ICONE = 46, 44, 34
 local TRAIT_L = 8 -- largeur du trait coloré de l'axe (retour de Virgile : plus large, plus lisible)
 local COULEURS = { orange = { 1, 0.5, 0.15 }, jaune = { 1, 0.82, 0 }, vert = { 0.25, 0.8, 0.25 } }
+-- Une durée en clair : « 45 s », « 12 min », « 1 h 05 » (AzerothCommune#70).
+local function duree(s)
+  s = math.floor(s + 0.5)
+  if s < 60 then return s .. " s" end
+  if s < 3600 then return math.floor(s / 60 + 0.5) .. " min" end
+  return ("%d h %02d"):format(math.floor(s / 3600), math.floor(s % 3600 / 60))
+end
+ns.duree = duree
+-- Les outils d'une étape (AzerothCommune#71) : « Marteau de forgeron : tu l'as » en vert, sinon en orange.
+local function texteOutils(e)
+  local t = {}
+  for _, o in ipairs(e.outils or {}) do
+    t[#t + 1] = o.a and ("|cff40c040%s : tu l'as|r"):format(o.nom) or ("|cffff9933%s : à avoir|r"):format(o.nom)
+  end
+  return #t > 0 and (" · " .. table.concat(t, " · ")) or ""
+end
 -- Le détail d'une étape : « de 25 à 85 · 13 à 18 fabrications (15 en moyenne) · incertaine », un nombre simple pour une
 -- étape orange (une fabrication = un point).
 local function detailEtape(e)
@@ -51,7 +67,8 @@ local function detailEtape(e)
   -- Le net par objet (Maitrise#12) : composants moins revente au marchand du produit, par fabrication. Le patron n'est pas
   -- répété ici : il a sa ligne « Apprendre » (Maitrise#13).
   local net = e.net >= 0 and ("net " .. lib.ArgentCourt(math.floor(e.net + 0.5))) or ("gain " .. lib.ArgentCourt(math.floor(-e.net + 0.5)))
-  return ("de %d à %d · %s%s · %s par objet"):format(e.de, e.a, fab, e.incertaine and " · |cffff9933incertaine|r" or "", net)
+  return ("de %d à %d · %s%s · %s · %s par objet%s"):format(e.de, e.a, fab, e.incertaine and " · |cffff9933incertaine|r" or "",
+    duree(e.temps or 0), net, texteOutils(e))
 end
 -- Une ligne d'apprentissage : « Apprendre X — Maître · 25 pa ».
 local function texteApprendre(e)
@@ -70,6 +87,14 @@ local function iconeSort(id) return (C_Spell and C_Spell.GetSpellTexture and C_S
 local function bulle(self)
   local e = self:GetParent().etape
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+  if e.outil then
+    GameTooltip:SetItemByID(e.objets[1])
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine(("Outil : %s, à avoir dans tes sacs pour cette étape"):format(e.nom), 1, 0.6, 0.2, true)
+    GameTooltip:AddLine("Maj+clic : le lien dans le chat", 0.6, 0.6, 0.6)
+    GameTooltip:Show()
+    return
+  end
   if e.apprendre then
     if e.objetPatron then GameTooltip:SetItemByID(e.objetPatron) else GameTooltip:SetSpellByID(e.cle) end
     GameTooltip:AddLine(" ")
@@ -90,7 +115,7 @@ end
 local function clic(self)
   local e = self:GetParent().etape
   -- Un patron (ligne « Apprendre ») ou le produit d'une étape : les clics d'un objet ; sinon (maître, enchantement) le sort.
-  local id = e.objetPatron or e.objet
+  local id = e.objetPatron or e.objet or (e.outil and e.objets[1])
   if id then
     HandleModifiedItemClick(lienObjet(id))
   elseif IsModifiedClick("CHATLINK") then
@@ -177,10 +202,15 @@ local function dessinerFrise()
   for i, e in ipairs(etapes) do
     local r = cadreEtape(i)
     r.etape = e
-    r.niveau:SetText(e.apprendre and "" or e.de) -- une ligne « Apprendre » garde sa place sur l'axe, sans répéter le niveau
+    r.niveau:SetText((e.apprendre or e.outil) and "" or e.de) -- une ligne « Apprendre » garde sa place sur l'axe, sans répéter le niveau
     r.icone:SetShown(not e.trou and not e.fin)
     traitsEtape(r, e)
-    if e.apprendre then
+    if e.outil then
+      r.point:SetColorTexture(0.85, 0.85, 0.85, 0.7)
+      r.icone.tex:SetTexture(C_Item.GetItemIconByID(e.objets[1]) or "Interface\\Icons\\INV_Misc_QuestionMark")
+      r.nom:SetText("|cffff9933Outil : " .. e.nom .. "|r")
+      r.detail:SetText(e.inconnu and "sacs pas encore relevés : à avoir pour l'étape suivante" or "à avoir dans tes sacs pour l'étape suivante")
+    elseif e.apprendre then
       r.point:SetColorTexture(0.85, 0.85, 0.85, 0.7) -- un tiret neutre, comme une étape : l'axe garde les couleurs des recettes
       r.icone.tex:SetTexture("Interface\\Icons\\INV_Misc_Book_11")
       r.nom:SetText("|cfff2a640" .. texteApprendre(e) .. "|r")
@@ -214,7 +244,7 @@ local function onglet(i)
 end
 
 -- Le résumé sous les réglages (Maitrise#12) : en-tête de la tranche, puis deux colonnes de postes (composants, ventes au
--- marchand, maître et patrons | net, net une fois sur dix), puis les avertissements (HV pas scanné, composants sans
+-- marchand, maître et patrons | net, net une fois sur dix, temps de fabrication), puis les avertissements (HV pas scanné, composants sans
 -- prix en rouge, trous en orange). Le total net = composants + maître et patrons − ventes au marchand.
 local function postes(r)
   local inconnus = 0
@@ -222,7 +252,8 @@ local function postes(r)
   local appr = lib.ArgentCourt(r.patrons) .. (inconnus > 0 and (" + %d prix inconnu%s"):format(inconnus, inconnus > 1 and "s" or "") or "")
   return ("Composants : %s\nVentes au marchand : %s\nMaître et patrons : %s"):format(lib.ArgentCourt(r.totalAchats),
       lib.ArgentCourt(r.revente), appr),
-    ("|cffffd100Total net : %s|r\nJusqu'à %s une fois sur dix"):format(lib.ArgentCourt(r.net), lib.ArgentCourt(r.netUneSurDix))
+    ("|cffffd100Total net : %s|r\nJusqu'à %s une fois sur dix\nTemps de fabrication : %s"):format(lib.ArgentCourt(r.net),
+      lib.ArgentCourt(r.netUneSurDix), duree(r.temps or 0))
 end
 -- La frise et le tableau des achats démarrent juste sous la dernière ligne de l'en-tête : sans avertissement, pas de vide
 -- réservé (retour de Virgile, captures du 23/11). haut = hauteur des avertissements écrits (0 sans).
