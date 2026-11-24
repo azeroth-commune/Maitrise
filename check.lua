@@ -35,9 +35,10 @@ local M, B, TIGE = 2770, 2840, 2841 -- minerai, barre, tige
 local function scenario(t)
   local r = {}
   for k, x in pairs(t.recettes) do
-    r[k] = { x[1], 1, 1, "Forge", x[2], x[3], x[4], x[5], x[6], x[7] or "maître", "source externe", x[8] or 0, x[9] or 0, x[10], x[11] }
+    r[k] = { x[1], 1, 1, "Forge", x[2], x[3], x[4], x[5], x[6], x[7] or "maître", "source externe", x[8] or 0, x[9] or 0, x[10], x[11],
+      nil, nil, nil, t.temps and t.temps[k], t.outils and t.outils[k] }
   end
-  acns.recettesClassic = r
+  acns.recettesClassic, acns.recettesOutils = r, t.tableOutils
   local items = {}
   for id, paliers in pairs(t.hv or {}) do
     local tiers = {}
@@ -52,6 +53,7 @@ local function scenario(t)
   for id, prix in pairs(t.revente or {}) do AzerothCommuneItems.items[id] = { name = "#" .. id, price = prix } end
   AzerothCommuneDB.chars = { [MOI] = { nom = "Moi Dupont", professions = { { name = "Forge", rank = t.rang, max = 300 } },
     recipes = t.connues and { Forge = { rank = t.rang, max = 300, known = t.connues } } or nil } }
+  AzerothCommuneDB.chars[MOI].bags = t.sacs
   AzerothCommuneDB.trainers = t.maitres
   return assert(Maitrise.Tranche(nil, "Forge", t.curseur))
 end
@@ -163,6 +165,34 @@ assert(pas == nil and pourquoi:find("dépasser", 1, true), tostring(pourquoi))
 pas, pourquoi = Maitrise.Tranche(nil, "Couture", 100)
 assert(pas == nil and pourquoi:find("pas relevé", 1, true), tostring(pourquoi))
 print("Maîtrise : tranche (moins chère, revente, fabriquer, réemploi, paliers, exclusions, trous, sans prix) OK")
+
+-- Temps de fabrication (AzerothCommune#70) : par étape, fabrications × temps d'incantation ; le total est leur somme.
+-- Outils (AzerothCommune#71) : chacun à sa première étape, « a » d'après les sacs relevés par le socle ; sacs pas relevés : nil.
+local OUTILS = { [162] = { "Marteau de forgeron", { 5956, 260811 } }, [373] = { "Bâtonnet runique en cuivre", { 6218 } } }
+local function tigeGrille(sacs)
+  return scenario({ rang = 1, curseur = 20, marchands = { [M] = 10, [TIGE] = 100 }, revente = { [TIGE] = 1 }, recettes = {
+    [4] = { TIGE, "Tige", { M, 1 }, 1, 5, 10 },
+    [5] = { 5005, "Grille", { TIGE, 1 }, 10, 20, 30 } }, temps = { [4] = 3, [5] = 5.5 }, outils = { [4] = { 162 }, [5] = { 162, 373 } },
+    tableOutils = OUTILS, sacs = sacs })
+end
+res = tigeGrille({ Backpack = { size = 16, items = { { id = 260811, count = 1 } } } })
+local somme = 0
+for _, f in ipairs(res.fabrications) do
+  assert(f.temps == f.fois * (f.nom == "Tige" and 3 or 5.5), f.nom .. " : " .. tostring(f.temps))
+  somme = somme + f.temps
+end
+assert(res.temps == somme and somme > 0, "le total est la somme des étapes : " .. tostring(res.temps))
+assert(#res.outils == 2 and res.outils[1].nom == "Marteau de forgeron" and res.outils[1].niveau == 1 and res.outils[1].a == true,
+  "le couteau de l'armée gnome dans les sacs : le marteau, on l'a")
+assert(res.outils[2].nom == "Bâtonnet runique en cuivre" and res.outils[2].niveau == res.fabrications[#res.fabrications].de
+  and res.outils[2].a == false, "le bâtonnet manque, au niveau de la Grille")
+local manque = {}
+for _, e in ipairs(ns.etapesFrise(res)) do if e.outil then manque[#manque + 1] = e end end
+assert(#manque == 1 and manque[1].nom == "Bâtonnet runique en cuivre" and manque[1].de == res.outils[2].niveau, "une ligne Outil, pour celui qui manque")
+res = tigeGrille(nil)
+assert(res.outils[1].a == nil, "sacs pas relevés : on ne devine pas")
+acns.recettesOutils = nil
+print("Maîtrise : temps de fabrication et outils OK")
 
 -- Règle des 20 % (Maitrise#9) : Gros (7 minerais, jaune dès 20, gris à 40) et Fin (1 minerai, jaune dès 10, gris à 30).
 -- À 28, Fin ne donne qu'un point sur 10 (10 minerais le point) contre 0,6 pour Gros (11,7 le point) : sans la règle, Fin

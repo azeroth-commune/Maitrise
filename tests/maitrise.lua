@@ -43,11 +43,13 @@ test("Maîtrise : la route d'une tranche de Forge, 1 → 40, dans la fenêtre", 
     assertTrue(#res.fabrications > 0 and #res.trous == 0, "des fabrications, sans trou")
     assertEquals("22/11 21:00", res.scan)
     -- La frise : une étape par fabrication, l'objectif au bout ; chaque fabrication porte l'icône de son objet.
-    local vues = etapes()
-    assertEquals(#res.fabrications + #res.trous + #res.apprentissages + 1, #vues, "les lignes de la frise (étapes, apprentissages, objectif)")
+    local vues, manquent = etapes(), 0
+    for _, o in ipairs(res.outils) do if not o.a then manquent = manquent + 1 end end
+    assertEquals(#res.fabrications + #res.trous + #res.apprentissages + manquent + 1, #vues,
+        "les lignes de la frise (étapes, apprentissages, outils qui manquent, objectif)")
     local avecIcone = 0
     for _, r in ipairs(vues) do if r.icone:IsShown() and r.icone.tex:GetTexture() then avecIcone = avecIcone + 1 end end
-    assertEquals(#res.fabrications + #res.apprentissages, avecIcone, "une icône par fabrication et par apprentissage")
+    assertEquals(#res.fabrications + #res.apprentissages + manquent, avecIcone, "une icône par fabrication, apprentissage et outil")
     -- Ctrl+clic droit sur l'icône, comme sur un objet du jeu : l'objet entre dans le Brouillon de Composants.
     local r1 = vues[1]
     for _, r in ipairs(vues) do if r.etape.objet and (not r1.etape.objet or r.etape.de < r1.etape.de) then r1 = r end end
@@ -268,4 +270,62 @@ test("Maîtrise : le résumé a ses postes, l'étape son net, l'apprentissage sa
     assertEquals(#res.fabrications, fabs)
     assertEquals(#res.apprentissages, apprends, "une ligne par apprentissage")
     MaitriseFrame:Hide()
+end)
+
+-- Temps de fabrication (AzerothCommune#70) et outils (AzerothCommune#71), sur la réserve du socle : une tranche de Forge
+-- (75 → 110) demande le marteau de forgeron ; sans lui dans les sacs, une ligne « Outil » ; avec, l'étape dit « tu l'as ».
+test("Maîtrise : le temps de chaque étape et le total ; l'outil à avoir, ou « tu l'as »", function()
+    local guid = UnitGUID("player")
+    local fiche = AzerothCommuneDB.chars[guid]
+    fiche.professions = { { name = "Forge", rank = 75, max = 300 } }
+    AzerothCommuneMarket[AzerothCommune.MaisonHV()] = { scanned = "22/11 21:00", time = time(), items = {
+        [2840] = { tiers = { { price = 40, qty = 2000 } } }, [2835] = { tiers = { { price = 10, qty = 2000 } } },
+        [2836] = { tiers = { { price = 20, qty = 2000 } } }, [2841] = { tiers = { { price = 80, qty = 2000 } } } } }
+    local sacs = fiche.bags
+    local function calculer(bags)
+        fiche.bags = bags
+        MaitriseDB = nil
+        MaitriseFrame:Hide()
+        SlashCmdList.MAITRISE("")
+        local dd = enfants(MaitriseFrame, function(c) return c.GenerateMenu and c.GetMenuDescription end)[1]
+        dd:GenerateMenu()
+        for _, e in dd:GetMenuDescription():EnumerateElementDescriptions() do
+            if MenuUtil.GetElementText(e) == "Forge (75)" then dd:Pick(e, MenuInputContext.MouseButton, "LeftButton") end
+        end
+        enfants(MaitriseFrame, function(c) return c:GetObjectType() == "EditBox" end)[1]:SetText("110")
+        bouton("Calculer"):Click()
+        return assert(Maitrise.Tranche(nil, "Forge", 110))
+    end
+    local ok, err = pcall(function()
+        local res = calculer({ Backpack = { size = 16, items = {} } })
+        assertTrue(res.temps > 0, "un temps de fabrication")
+        local texte = {}
+        for _, rg in ipairs({ MaitriseFrame:GetRegions() }) do
+            if rg.GetText and rg:GetText() then texte[#texte + 1] = rg:GetText() end
+        end
+        texte = table.concat(texte, "\n")
+        assertTrue(texte:find("Temps de fabrication : %d") ~= nil, "le total au résumé : " .. texte)
+        local marteau
+        for _, o in ipairs(res.outils) do if o.nom == "Marteau de forgeron" then marteau = o end end
+        assertNotNil(marteau, "la Forge demande le marteau de forgeron")
+        assertEquals(false, marteau.a)
+        local ligne, detail
+        for _, r in ipairs(etapes()) do
+            if r.etape.outil and r.etape.nom == "Marteau de forgeron" then ligne = r end
+            if r.etape.fois and r.etape.outils then detail = r end
+        end
+        assertNotNil(ligne, "une ligne « Outil » pour le marteau")
+        assertTrue(ligne.nom:GetText():find("Outil : Marteau de forgeron", 1, true) ~= nil, ligne.nom:GetText())
+        assertTrue(detail.detail:GetText():find("Marteau de forgeron : à avoir", 1, true) ~= nil, detail.detail:GetText())
+        -- Le marteau dans les sacs : plus de ligne « Outil », l'étape dit « tu l'as ».
+        res = calculer({ Backpack = { size = 16, items = { { id = 5956, count = 1 } } } })
+        for _, r in ipairs(etapes()) do
+            assertTrue(not (r.etape.outil and r.etape.nom == "Marteau de forgeron"), "plus de ligne Outil pour le marteau")
+            if r.etape.fois and r.etape.outils then detail = r end
+        end
+        assertTrue(detail.detail:GetText():find("Marteau de forgeron : tu l'as", 1, true) ~= nil, detail.detail:GetText())
+    end)
+    fiche.bags = sacs
+    MaitriseFrame:Hide()
+    if not ok then error(err, 0) end
 end)

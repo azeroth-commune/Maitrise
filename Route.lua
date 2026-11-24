@@ -9,8 +9,9 @@ local lib = AzerothCommune
 -- Ce que Maîtrise lit : le socle ne relève que les types auxquels un add-on a souscrit.
 -- « maîtres de métier » : la compétence demandée et le prix de chaque recette chez un maître (relevé direct, AzerothCommune#68).
 -- « recettes connues » : une recette à condition (spécialisation, réputation) n'est prise que si le personnage la connaît.
+-- « inventaires » : les sacs et l'équipement du personnage, pour dire s'il a l'outil d'une étape (AzerothCommune#71).
 for _, t in ipairs({ "base des recettes", "métiers et compétences", "cours de l'HV", "marchands", "objets", "maîtres de métier",
-  "recettes connues" }) do lib:Souscrire(t) end
+  "recettes connues", "inventaires" }) do lib:Souscrire(t) end
 
 local ITERATIONS, DEPART2, PROFONDEUR = 40, 21, 3
 -- Le temps compte aussi : un point à moins de 20 % de chance n'est pas compté pour une recette, sauf si aucune autre ne
@@ -54,7 +55,8 @@ function ns.recettesDuMetier(base, metier, connues, prixPatron)
       if connue or patronHV or (SOURCES[r.source] and aPrix) then
         out[#out + 1] = { key = k, name = r.name, learn = r.level or 1, y = r.yellow, g = r.grey, o = r.output,
           n = math.max(1, r.made_min or 1), reag = r.reagents or {}, pattern = prix, patronHV = patronHV or nil,
-          src = r.source, objetPatron = r.patron, connue = connue and true or nil, prixConnu = prixConnu and true or nil }
+          src = r.source, objetPatron = r.patron, connue = connue and true or nil, prixConnu = prixConnu and true or nil,
+          cast = r.cast, outils = r.outils }
       end
     end
   end
@@ -292,7 +294,7 @@ function ns.route(rs, achat, revente, FROM, TO)
       local last = fab[#fab]
       if not (last and last.cle == b.r.key and last.a == s) then
         last = { de = s, a = s, cle = b.r.key, nom = b.r.name, fois = 0, patron = b.r.pattern, patronHV = b.r.patronHV, objet = b.r.o,
-          n = b.r.n, composants = b.r.reag, plages = {}, chances = {} }
+          n = b.r.n, composants = b.r.reag, plages = {}, chances = {}, cast = b.r.cast, outils = b.r.outils }
         fab[#fab + 1] = last
         -- Une recette à apprendre (Maitrise#13) : au niveau de sa première étape ; rien pour une recette connue ou d'emblée.
         local r = b.r
@@ -323,7 +325,11 @@ function ns.route(rs, achat, revente, FROM, TO)
     f.net = f.coutNet / f.fois -- le net par fabrication : composants − revente du produit (Maitrise#12)
     f.coutNet = nil
     f.fois = math.ceil(f.fois - 1e-9)
+    f.temps = f.cast and f.fois * f.cast -- secondes : fabrications × temps d'incantation (AzerothCommune#70) ; nil : inconnu
+    f.cast = nil
   end
+  local temps, tempsIncomplet = 0, nil
+  for _, f in ipairs(fab) do if f.temps then temps = temps + f.temps else tempsIncomplet = true end end
   -- Le coût « une fois sur dix » (Maitrise#12) : le net moyen, plus pour chaque étape non orange son net par fabrication
   -- (s'il est positif) × les fabrications de plus du 90e centile. Somme des 90e centiles étape par étape : une estimation
   -- prudente (le vrai 90e centile de la somme est plus bas, les aléas se compensent un peu ; mais les étapes à gain et
@@ -341,7 +347,41 @@ function ns.route(rs, achat, revente, FROM, TO)
   return { de = FROM, a = TO, fabrications = fab, achats = bestPlan.list, totalAchats = bestPlan.achats,
     patrons = bestPlan.patrons, total = bestPlan.achats + bestPlan.patrons, revente = bestPlan.revente, trous = trous,
     sansPrix = sp, incomplet = bestPlan.incomplet, net = net, netUneSurDix = math.floor(dix + 0.5),
-    apprentissages = apprentissages }
+    apprentissages = apprentissages, temps = temps, tempsIncomplet = tempsIncomplet }
+end
+
+-- Les outils de la route (AzerothCommune#71) : chaque étape porte les siens { { nom, objets, a } }, et res.outils les liste
+-- une fois, au niveau de leur première étape { { niveau, nom, objets, a } } ; a = le personnage en a un dans ses sacs ou son
+-- équipement (relevés par le socle : inventaires), nil quand ses sacs ne sont pas relevés (on ne devine rien).
+function ns.outils(res, fiche)
+  local possede
+  if fiche and fiche.bags then
+    possede = {}
+    for _, sac in pairs(fiche.bags) do for _, it in ipairs(sac.items or {}) do if it.id then possede[it.id] = true end end end
+    for _, l in pairs(fiche.equipped or {}) do
+      local id = tonumber(tostring(l):match("item:(%d+)"))
+      if id then possede[id] = true end
+    end
+  end
+  res.outils = {}
+  local vus = {}
+  for _, f in ipairs(res.fabrications) do
+    local ls = {}
+    for _, o in ipairs(f.outils or {}) do
+      local a = nil
+      if possede then
+        a = false
+        for _, id in ipairs(o.objets or {}) do a = a or possede[id] or false end
+      end
+      ls[#ls + 1] = { nom = o.nom, objets = o.objets, a = a }
+      if not vus[o.nom] then
+        vus[o.nom] = true
+        res.outils[#res.outils + 1] = { niveau = f.de, nom = o.nom, objets = o.objets, a = a }
+      end
+    end
+    f.outils = #ls > 0 and ls or nil
+  end
+  return res
 end
 
 -- La compétence du personnage (GUID, nil = le connecté) dans ce métier, d'après le relevé du socle ; et ses métiers.
@@ -362,7 +402,10 @@ end
 -- sans), sansHV (aucun cours de l'HV : marchands seuls), net (total − revente), netUneSurDix (le net au 90e centile,
 -- estimation prudente : voir ns.route), apprentissages = { { niveau, cle, nom, source (« Maître », « Patron », « Patron à l'HV »), prix
 -- (nil : inconnu), objetPatron } } (les recettes à apprendre, à leur niveau ; sans les connues) } ; chaque fabrication porte
--- aussi net (composants − revente du produit, par fabrication, en cuivre) }, ou nil et la raison.
+-- aussi net (composants − revente du produit, par fabrication, en cuivre), temps (secondes : fabrications × temps
+-- d'incantation, AzerothCommune#70 ; nil : inconnu, recette vue absente de la réserve) et outils (voir ns.outils) ; temps =
+-- la somme des étapes connues, tempsIncomplet = true si l'une ne l'est pas ; outils = voir ns.outils }, ou
+-- nil et la raison.
 -- ponytail: le stock n'entre pas dans la route (tout acheté) ; Composants le déduit dans les Besoins du projet de
 -- tranche (Maitrise#3).
 function ns.tranche(guid, metier, curseur)
@@ -394,6 +437,9 @@ function ns.tranche(guid, metier, curseur)
   local function prixPatron(id) return (lib:PrixAchat(id, 1, lignes, {})) end
   local res = ns.route(ns.recettesDuMetier(base, metier, connues, prixPatron), achat, revente, rang, curseur)
   res.connuesLues = connues ~= nil -- sans relevé, toute recette de la route est listée à apprendre
+  local inv = lib:Lire("inventaires", guid)
+  local _, fiche = next(inv and inv.persos or {})
+  ns.outils(res, fiche)
   res.metier = metier
   res.scan = hv and lotHV and lotHV.scan and lotHV.scan.scanned
   res.fournisseur = hv and lotHV and lotHV.fournisseur
