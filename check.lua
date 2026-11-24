@@ -324,6 +324,13 @@ assert(ns.trancheCreer("Forge", res))
 local _, p3 = ns.trancheDe("Forge")
 Composants.Supprimer(p3.id)
 assert(ns.trancheDe("Forge") == nil, "projet supprimé : tranche oubliée")
+-- Fin sur le signal du socle (AzerothCommune#69) : un gain de compétence relu et signalé termine la tranche, sans fenêtre.
+rang(5)
+assert(ns.trancheCreer("Forge", scenario({ rang = 5, curseur = 10, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Lame", { M, 2 }, 1, 10, 20 } } })))
+local _, p4 = ns.trancheDe("Forge")
+rang(10)
+AzerothCommune:Signaler("métiers et compétences")
+assert(MaitriseDB.tranches[UnitGUID("player")].Forge == nil and p4.tenu == nil, "tranche terminée au signal, sans rien lire d'autre")
 print("Maîtrise : tranche tenue (créer, une par métier, progression, recalcul garde les choix, fin, abandon) OK")
 
 -- Le panneau de la fenêtre de métier : la tranche garde les lignes de la frise (sans l'objectif), le panneau les place à la

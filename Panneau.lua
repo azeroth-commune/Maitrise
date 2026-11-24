@@ -222,7 +222,8 @@ local function rafraichir()
   panneau:Show()
 end
 
--- Fenêtre de métier ouverte, fermée ou mise à jour (une recette apprise), compétence changée, tranche tenue ou lâchée
+-- Fenêtre de métier ouverte, fermée ou mise à jour (une recette apprise), compétence changée (les métiers relus et signalés
+-- par le socle, AzerothCommune#69 : pas SKILL_LINES_CHANGED, que le socle n'aurait pas encore relu), tranche tenue ou lâchée
 -- (Composants signale tout changement de projet) : au plus une fois par image d'événements.
 local prevu
 local function bientot()
@@ -231,6 +232,7 @@ local function bientot()
   C_Timer.After(0.2, function() prevu = false; rafraichir() end)
 end
 local ev = CreateFrame("Frame")
-for _, e in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_CLOSE", "SKILL_LINES_CHANGED" }) do ev:RegisterEvent(e) end
+for _, e in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_CLOSE" }) do ev:RegisterEvent(e) end
 ev:SetScript("OnEvent", bientot)
+lib:QuandReleve("métiers et compétences", bientot)
 Composants.QuandChange(bientot)

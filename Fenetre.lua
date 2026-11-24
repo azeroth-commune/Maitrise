@@ -274,8 +274,9 @@ end
 -- Deux rôles séparés (retour de Virgile sur la PR #14) : Calculer calcule et affiche, sans jamais toucher au projet ; le
 -- bouton du projet enregistre la route affichée dans le projet de Composants (« En faire un projet » sans tranche,
 -- « Mettre à jour le projet » avec), grisé tant qu'aucune route n'est calculée pour ce métier. La progression de la
--- tranche (compétence sur le curseur) est dans le titre de la fenêtre. Relu à l'ouverture et toutes les 5 s tant que la
--- fenêtre est ouverte, par le socle seulement (jamais GetProfessions) ; au curseur atteint, la tranche se termine.
+-- tranche (compétence sur le curseur) est dans le titre de la fenêtre. Relu à l'ouverture, à chaque gain de compétence
+-- (signal du socle, AzerothCommune#69) et toutes les 5 s tant que la fenêtre est ouverte, par le socle seulement (jamais
+-- GetProfessions) ; au curseur atteint, la tranche se termine.
 local function majBouton()
   if not (frame and frame:IsShown() and choix) then return end
   local e = ns.trancheEtat(choix)
@@ -372,6 +373,7 @@ local function construire()
   etatB:SetScript("OnEnter", bulleTranche)
   etatB:SetScript("OnLeave", function() GameTooltip:Hide() end)
   C_Timer.NewTicker(5, majBouton)
+  lib:QuandReleve("métiers et compétences", majBouton)
   resume = {}
   local function texte(nom, x, y, droite)
     local t = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")

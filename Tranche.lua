@@ -121,7 +121,6 @@ end
 -- L'état de la tranche : { tranche, rang, a, texte « <métier> <compétence> / <curseur> » }, ou nil sans tranche.
 -- Lit la compétence par le socle seulement ; au curseur atteint, la tranche se termine (projet lâché, une ligne au chat)
 -- et on rend nil.
--- ponytail: le socle relit les métiers toutes les 60 s et ne le signale pas : la fin peut se voir avec une minute de retard.
 function ns.trancheEtat(metier)
   local t = ns.trancheDe(metier)
   if not t then return nil end
@@ -135,3 +134,10 @@ function ns.trancheEtat(metier)
   end
   return { tranche = t, rang = rang, a = t.a, texte = ("%s %d / %d"):format(metier, rang, t.a) }
 end
+
+-- Le socle relit les métiers sur un gain de compétence et le signale (AzerothCommune#69) : chaque tranche du connecté est
+-- relue aussitôt et se termine au curseur atteint, fenêtre de Maîtrise ouverte ou non.
+function ns.tranchesSuivre()
+  for metier in pairs(db().tranches[UnitGUID("player")] or {}) do ns.trancheEtat(metier) end
+end
+AzerothCommune:QuandReleve("métiers et compétences", function() ns.tranchesSuivre() end)

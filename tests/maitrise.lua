@@ -137,11 +137,18 @@ test("Maîtrise : la tranche devient un projet tenu, se met à jour et se termin
     assertEquals("Maîtrise : Forge de 11 à 30", projet.tenu)
     assertEquals("Maîtrise : Forge de 11 à 30", projet.name, "le nom suit les niveaux")
     assertEquals(1, #Composants.Projets(), "le même projet, pas un autre")
-    -- Atteindre le curseur : la tranche se termine, le projet est lâché, le bouton redevient « En faire un projet ».
-    rang(30)
+    -- Atteindre le curseur, fenêtre fermée : le gain de compétence (SKILL_LINES_CHANGED), relu et signalé par le socle
+    -- (AzerothCommune#69), termine la tranche tout de suite ; le projet est lâché, le bouton redevient « En faire un projet ».
     MaitriseFrame:Hide()
+    local gp, gpi = GetProfessions, GetProfessionInfo
+    GetProfessions = function() return 1 end
+    GetProfessionInfo = function() return "Forge", "icône", 30, 75 end
+    local ok, err = pcall(FireEvent, "SKILL_LINES_CHANGED")
+    GetProfessions, GetProfessionInfo = gp, gpi
+    assert(ok, err)
+    assertEquals(nil, projet.tenu, "projet lâché sans ouvrir la fenêtre")
+    assertNil(MaitriseDB.tranches[guid].Forge, "tranche terminée au signal")
     SlashCmdList.MAITRISE("")
-    assertEquals(nil, projet.tenu, "projet lâché")
     assertNotNil(bouton("En faire un projet"), "une autre tranche est possible")
     assertNil(MaitriseDB.tranches[guid].Forge, "tranche oubliée")
     MaitriseFrame:Hide()
