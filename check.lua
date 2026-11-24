@@ -1,6 +1,6 @@
 -- Vérification hors jeu (non chargée par la TOC) : luajit Maitrise/check.lua, depuis le dossier des add-ons.
 -- Le socle Azeroth Commune est chargé avant, comme dans le jeu : ses SavedVariables servent de données (métiers du perso,
--- cours de l'HV, marchands, objets) et sa réserve des recettes (privée, acns.recettesClassic) est celle de chaque scénario.
+-- cours de l'HV, marchands, objets) et sa réserve des recettes (privée, acns.recettesReserve) est celle de chaque scénario.
 -- Tout passe par la fonction publique Maitrise.Tranche.
 local noop = function() end
 local stubMT = { __index = function() return noop end }
@@ -18,7 +18,7 @@ UnitGUID = function(u) if u == "player" then return MOI end end
 AzerothCommuneDB, AzerothCommuneItems, AzerothCommuneMarket = { recipes = {}, chars = {}, lots = {} }, { items = {} }, {}
 local acns = {}
 for f in io.open("AzerothCommune/AzerothCommune.toc"):read("*a"):gmatch("([%w_]+)%.lua") do
-  if f ~= "VendorData" and f ~= "RecettesClassic" and f ~= "CatalogueObjets" then assert(loadfile("AzerothCommune/" .. f .. ".lua"))("AzerothCommune", acns) end
+  if f ~= "VendorData" and f ~= "RecettesReserve" and f ~= "CatalogueObjets" then assert(loadfile("AzerothCommune/" .. f .. ".lua"))("AzerothCommune", acns) end
 end
 -- Composants (dépôt voisin, chargé avant Maîtrise comme dans le jeu) : la tranche y tient un projet.
 local cns = {}
@@ -38,7 +38,7 @@ local function scenario(t)
     r[k] = { x[1], 1, 1, "Forge", x[2], x[3], x[4], x[5], x[6], x[7] or "maître", "source externe", x[8] or 0, x[9] or 0, x[10], x[11],
       t.marchandsPatron and t.marchandsPatron[k], nil, nil, t.temps and t.temps[k], t.outils and t.outils[k] }
   end
-  acns.recettesClassic, acns.recettesOutils = r, t.tableOutils
+  acns.recettesReserve, acns.recettesOutils = r, t.tableOutils
   local items = {}
   for id, paliers in pairs(t.hv or {}) do
     local tiers = {}

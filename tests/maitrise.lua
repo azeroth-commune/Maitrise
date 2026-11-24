@@ -1,5 +1,5 @@
 -- Tests d'intégration dans wow-ui-sim (tools/sim.sh test Maitrise) : Maîtrise chargé avec le socle et Composants dans
--- l'interface Forever simulée. La réserve des recettes du socle (RecettesClassic.lua, générée) donne les recettes ; le
+-- l'interface Forever simulée. La réserve des recettes du socle (RecettesReserve.lua, générée) donne les recettes ; le
 -- métier du personnage est posé dans la base du socle.
 
 local function enfants(f, ok, out)
