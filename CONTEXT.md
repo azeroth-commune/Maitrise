@@ -37,7 +37,10 @@ Le nombre de fabrications qu'une étape demande 8 fois sur 10 (du 10e au 90e cen
 _Avoid_: marge, intervalle de confiance
 
 **Apprentissage**:
-Une recette de la route que le personnage ne connaît pas encore (chez un maître, ou par un patron vendu ou à l'HV) ; une ligne à part dans la frise, au niveau de sa première étape, avec sa source et son prix (« prix inconnu » sinon). Une recette connue n'en a pas ; le patron n'est pas répété sur l'étape.
+Une recette de la route que le personnage ne connaît pas encore (chez un maître, ou par un patron vendu ou à l'HV), ou un rang (Compagnon, Expert, Artisan) que la tranche dépasse ; une ligne à part dans la frise, au niveau de sa première étape (un rang : quand le maître l'enseigne), avec sa source, son prix (« prix inconnu » sinon) et où l'apprendre (maître ou marchand de la faction). Cochée toute seule quand le socle la voit apprise. Une recette connue n'en a pas ; le patron n'est pas répété sur l'étape.
+
+**Plafond**:
+Le plus haut niveau de métier que le personnage peut débloquer à son niveau (75, puis Compagnon 150 au niveau 10, Expert 225 au niveau 20, Artisan 300 au niveau 35) ; le curseur ne le dépasse pas, et la raison est écrite sous lui (« 225 max : Artisan au niveau 35 »).
 _Avoid_: patron (sur l'étape)
 
 **Une fois sur dix**:

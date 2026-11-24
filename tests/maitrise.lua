@@ -329,3 +329,78 @@ test("Maîtrise : le temps de chaque étape et le total ; l'outil à avoir, ou �
     MaitriseFrame:Hide()
     if not ok then error(err, 0) end
 end)
+
+-- À apprendre (Maitrise#4) : les rangs et les recettes à apprendre avec leur prix et où, comptés dans le total ; cochés tout
+-- seuls quand le socle les voit appris ; le curseur plafonné au niveau du personnage, la raison écrite sous lui.
+test("Maîtrise : rangs à apprendre, cochés par le socle, curseur plafonné par le niveau", function()
+    local guid = UnitGUID("player")
+    local fiche = AzerothCommuneDB.chars[guid]
+    local garde = { character = fiche.character, recipes = fiche.recipes, trainers = AzerothCommuneDB.trainers }
+    local waypoint, peut = C_Map.SetUserWaypoint, C_Map.CanSetUserWaypointOnMap
+    local ok, err = pcall(function()
+        fiche.professions = { { name = "Forge", rank = 60, max = 75 } }
+        fiche.character = { level = 25 }
+        fiche.recipes = { Forge = { rank = 60, max = 75, known = {} } }
+        AzerothCommuneDB.trainers = { [9999] = { services = { { name = "Forge de compagnon", skill = "Forge", skill_rank = 50, cost = 450 } } } }
+        AzerothCommuneMarket[AzerothCommune.MaisonHV()] = { scanned = "22/11 21:00", time = time(), items = {
+            [2840] = { tiers = { { price = 40, qty = 2000 } } }, [2835] = { tiers = { { price = 10, qty = 2000 } } },
+            [2836] = { tiers = { { price = 20, qty = 2000 } } }, [2841] = { tiers = { { price = 80, qty = 2000 } } } } }
+        MaitriseDB = nil
+        if MaitriseFrame then MaitriseFrame:Hide() end
+        SlashCmdList.MAITRISE("")
+        local dd = enfants(MaitriseFrame, function(c) return c.GenerateMenu and c.GetMenuDescription end)[1]
+        dd:GenerateMenu()
+        for _, e in dd:GetMenuDescription():EnumerateElementDescriptions() do
+            if MenuUtil.GetElementText(e) == "Forge (60)" then dd:Pick(e, MenuInputContext.MouseButton, "LeftButton") end
+        end
+        local function textes()
+            local t = {}
+            for _, rg in ipairs({ MaitriseFrame:GetRegions() }) do if rg.GetText and rg:GetText() and rg:IsShown() then t[#t + 1] = rg:GetText() end end
+            return table.concat(t, "\n")
+        end
+        assertTrue(textes():find("225 max : Artisan au niveau 35", 1, true) ~= nil, "la raison sous le curseur : " .. textes())
+        local curseur = enfants(MaitriseFrame, function(c) return c:GetObjectType() == "EditBox" end)[1]
+        curseur:SetText("260")
+        bouton("Calculer"):Click()
+        assertEquals("225", curseur:GetText(), "le curseur ramené au plafond")
+        local res = assert(Maitrise.Tranche(nil, "Forge", 260))
+        assertEquals(225, res.a)
+        -- Les rangs : Compagnon au prix du maître relevé, Expert à prix inconnu ; le prix compte dans « Maître et patrons ».
+        local compagnon, expert
+        for _, r in ipairs(etapes()) do
+            if r.etape.rang == 150 then compagnon = r elseif r.etape.rang == 225 then expert = r end
+        end
+        assertNotNil(compagnon, "une ligne pour le rang Compagnon")
+        assertNotNil(expert, "une ligne pour le rang Expert")
+        assertTrue(compagnon.nom:GetText():find("Apprendre Compagnon (150) — Maître · " .. AzerothCommune.ArgentCourt(450), 1, true) ~= nil, compagnon.nom:GetText())
+        assertTrue(expert.nom:GetText():find("prix inconnu", 1, true) ~= nil, expert.nom:GetText())
+        assertTrue(res.patrons >= 450, "le rang compté avec les patrons")
+        assertTrue(textes():find("Maître et patrons : " .. AzerothCommune.ArgentCourt(res.patrons), 1, true) ~= nil, textes())
+        -- Où : un maître de la Forge de la faction du joueur, d'après le socle (AzerothCommune#80).
+        local ou = AzerothCommune.MaitresDuMetier("Forge")
+        local f, nom = AzerothCommune.Faction(), nil
+        for _, m in ipairs(ou) do if (not m.faction or m.faction == f) and m.nom and compagnon.detail:GetText():find(m.nom, 1, true) then nom = m.nom end end
+        assertNotNil(nom, "le maître où l'apprendre : " .. compagnon.detail:GetText())
+        -- Clic : un point sur la carte, chez ce maître.
+        local vers
+        C_Map.CanSetUserWaypointOnMap = function() return true end
+        C_Map.SetUserWaypoint = function(p) vers = p end
+        compagnon.icone:GetScript("OnClick")(compagnon.icone, "LeftButton")
+        assertNotNil(vers, "un point sur la carte")
+        -- Coché tout seul : le socle relève le rang appris (plafond à 150) et une recette apprise ; la fenêtre les coche.
+        local recette
+        for _, r in ipairs(etapes()) do if r.etape.apprendre and r.etape.cle then recette = r end end
+        assertNotNil(recette, "une recette à apprendre sur 60 → 225")
+        fiche.professions[1].max = 150
+        fiche.recipes.Forge.known[recette.etape.cle] = true
+        AzerothCommune:Signaler("métiers et compétences")
+        assertTrue(compagnon.coche:IsShown(), "Compagnon coché")
+        assertTrue(compagnon.nom:GetText():find("Appris : Compagnon (150)", 1, true) ~= nil, compagnon.nom:GetText())
+        assertTrue(not expert.coche:IsShown(), "Expert pas encore")
+        assertTrue(recette.coche:IsShown(), "la recette vue connue : cochée")
+    end)
+    fiche.character, fiche.recipes, AzerothCommuneDB.trainers = garde.character, garde.recipes, garde.trainers
+    C_Map.SetUserWaypoint, C_Map.CanSetUserWaypointOnMap = waypoint, peut
+    if MaitriseFrame then MaitriseFrame:Hide() end
+    if not ok then error(err, 0) end
+end)

@@ -67,7 +67,7 @@ function ns.etapesFrise(res)
 end
 
 -- Ce que la tranche garde de chaque ligne de la frise (le panneau la redessine sans recalculer).
-local GARDE = { "de", "a", "cle", "nom", "fois", "objet", "fourchette", "trou", "apprendre", "source", "prix", "objetPatron" }
+local GARDE = { "de", "a", "cle", "nom", "fois", "objet", "fourchette", "trou", "apprendre", "source", "prix", "objetPatron", "rang" }
 
 -- Tient le projet p avec la route res, au curseur : met la tranche (GUID du connecté) à jour. Rend la tranche.
 local function tenir(p, metier, res, curseur)
@@ -113,7 +113,7 @@ function ns.trancheRecalculer(metier, curseur)
   local res, err = ns.tranche(nil, metier, curseur)
   if not res then return nil, err end
   if #res.fabrications == 0 then return nil, "aucune recette à fabriquer sur cette tranche" end
-  tenir(p, metier, res, curseur)
+  tenir(p, metier, res, res.a) -- le curseur, ramené au plafond du personnage s'il le dépassait
   return res
 end
 
