@@ -49,7 +49,9 @@ function ns.recettesDuMetier(base, metier, connues, prixPatron)
       -- Le prix pour l'apprendre est-il connu ? (un maître relevé peut enseigner gratis : 0 connu n'est pas « inconnu »)
       local prixConnu = connue or r.source == "d'emblée" or patronHV or (r.source == "maître" and r.prix_maitre ~= nil)
         or (r.source == "patron vendu" and r.pattern_price ~= nil)
-      if connue or SOURCES[r.source] or patronHV then
+      -- Un patron vendu sans prix connu (jetons, prix du client à 0 : Maitrise#21) n'est pas gratuit : comme une « inconnue ».
+      local aPrix = r.source ~= "patron vendu" or r.pattern_price ~= nil
+      if connue or patronHV or (SOURCES[r.source] and aPrix) then
         out[#out + 1] = { key = k, name = r.name, learn = r.level or 1, y = r.yellow, g = r.grey, o = r.output,
           n = math.max(1, r.made_min or 1), reag = r.reagents or {}, pattern = prix, patronHV = patronHV or nil,
           src = r.source, objetPatron = r.patron, connue = connue and true or nil, prixConnu = prixConnu and true or nil }

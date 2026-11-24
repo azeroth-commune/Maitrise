@@ -127,6 +127,14 @@ res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RV
 assert(not res.fabrications[1].patronHV and res.patrons == 500, "patron vendu plus cher à l'HV : prix du marchand : " .. noms(res))
 res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RV })
 assert(res.patrons == 500 and not res.fabrications[1].patronHV, "patron vendu, pas à l'HV : prix du marchand : " .. noms(res))
+-- Un patron vendu à prix inconnu (Maitrise#21) n'est pas gratuit : écarté, sauf si son patron est à l'HV.
+RV[9][8] = nil
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RV })
+assert(res.fabrications[1].nom == "Lame" and res.patrons == 0, "patron vendu à prix inconnu : écarté : " .. noms(res))
+res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RV, hv = { [7001] = { { 100, 1 } } } })
+assert(res.fabrications[1].nom == "Vendu" and res.fabrications[1].patronHV and res.patrons == 100,
+  "patron vendu à prix inconnu mais à l'HV : prix de l'HV : " .. noms(res))
+RV[9][8] = 500
 -- Une recette déjà connue est gardée quelle que soit sa source, apprise pour 0 et sans patron à l'HV.
 res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 10 }, recettes = RH, connues = { [9] = true }, hv = { [7001] = { { 100, 1 } } } })
 assert(res.fabrications[1].nom == "Butin" and not res.fabrications[1].patronHV and res.patrons == 0 and res.total == 9 * 10,
