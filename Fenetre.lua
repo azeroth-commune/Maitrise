@@ -1,5 +1,5 @@
 -- Maîtrise, la fenêtre (/maitrise) : le joueur vient y faire deux choses — choisir un métier et jusqu'où le monter ce
--- soir, puis lire la route (quelle recette, combien de fois) et ce qu'elle coûte. Un menu des métiers, un curseur, un
+-- soir, puis lire la route (quelle recette, combien de fois) et ce qu'elle coûte. Un menu des métiers (de tous mes personnages), un curseur, un
 -- bouton Calculer (rien ne se recalcule tout seul) ; deux onglets : la Route (une frise) et les Achats (skill ui-addon).
 local _, ns = ...
 local lib = AzerothCommune
@@ -10,15 +10,26 @@ local nomsDeSession = {}
 local frame, metierB, curseurE, plafondT, calculB, etatB, resume, tabAchats, vues, frise
 local HAUT = 204 -- sous l'en-tête (réglages, résumé de la tranche) : le haut de la frise et du tableau des achats
 local choix -- le métier choisi
+local perso -- le personnage choisi (GUID, nil = le connecté) : un autre de mes personnages se prépare d'ici (Maitrise#5)
 local res -- la dernière tranche calculée
 
-local function metiers()
+local function metiers(guid)
   local out = {}
-  for _, m in ipairs(ns.metiers()) do if not RECOLTE[m.nom] then out[#out + 1] = m end end
+  for _, m in ipairs(ns.metiers(guid)) do if not RECOLTE[m.nom] then out[#out + 1] = m end end
   return out
 end
-local function rangDe(nom)
-  for _, m in ipairs(metiers()) do if m.nom == nom then return m.rang end end
+local function rangDe(nom, guid)
+  for _, m in ipairs(metiers(guid)) do if m.nom == nom then return m.rang end end
+end
+-- Mes autres personnages que le socle connaît (« métiers et compétences »), qui ont un métier à monter, par prénom.
+local function autres()
+  local d = lib:Lire("métiers et compétences", "tous")
+  local out, moi = {}, UnitGUID("player")
+  for g in pairs(d and d.persos or {}) do
+    if g ~= moi and #metiers(g) > 0 then out[#out + 1] = { guid = g, prenom = ns.prenomAutre(g) } end
+  end
+  table.sort(out, function(a, b) return a.prenom < b.prenom end)
+  return out
 end
 
 local function nomObjet(id) return lib.NomObjet(id, lib:Lire("objets") or {}, nomsDeSession) end
@@ -99,8 +110,8 @@ function ns.meilleurEndroit(liste)
 end
 -- Clic sur un apprentissage : un point sur la carte du monde (le point suivi du jeu) chez le PNJ le plus commode, et son
 -- nom au chat ; un patron à l'HV : « à l'hôtel des ventes ».
-function ns.surCarte(e, metier)
-  local m = ns.meilleurEndroit(ns.endroits(e, metier))
+function ns.surCarte(e, metier, guid)
+  local m = ns.meilleurEndroit(ns.endroits(e, metier, guid))
   if not m then
     print("|cffffd100Maîtrise :|r " .. (e.patronHV and "le patron s'achète à l'hôtel des ventes." or "on ne sait pas où l'apprendre."))
     return
@@ -138,8 +149,8 @@ local function bulle(self)
     if e.objetPatron then GameTooltip:SetItemByID(e.objetPatron) elseif e.cle then GameTooltip:SetSpellByID(e.cle) else GameTooltip:SetText(e.nom) end
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine(texteApprendre(e), 0.95, 0.65, 0.25)
-    if ns.appris(e, res.metier) then GameTooltip:AddLine("Appris (vu par Azeroth Commune)", 0.25, 0.8, 0.25) end
-    local ou = ns.endroits(e, res.metier)
+    if ns.appris(e, res.metier, res.guid) then GameTooltip:AddLine("Appris (vu par Azeroth Commune)", 0.25, 0.8, 0.25) end
+    local ou = ns.endroits(e, res.metier, res.guid)
     for i = 1, math.min(3, #ou) do GameTooltip:AddLine(ns.lieu(ou[i]), 0.8, 0.8, 0.8) end
     if #ou > 3 then GameTooltip:AddLine(("et %d autres"):format(#ou - 3), 0.8, 0.8, 0.8) end
     GameTooltip:AddLine(#ou > 0 and "Clic : un point sur la carte (ta zone, ton continent d'abord)" or (e.patronHV and "À l'hôtel des ventes" or "Où l'apprendre : inconnu"), 0.6, 0.6, 0.6)
@@ -158,7 +169,7 @@ local function bulle(self)
 end
 local function clic(self, bouton)
   local e = self:GetParent().etape
-  if e.apprendre and bouton == "LeftButton" and not IsModifierKeyDown() then ns.surCarte(e, res.metier) return end
+  if e.apprendre and bouton == "LeftButton" and not IsModifierKeyDown() then ns.surCarte(e, res.metier, res.guid) return end
   -- Un patron (ligne « Apprendre ») ou le produit d'une étape : les clics d'un objet ; sinon (maître, enchantement) le sort.
   local id = e.objetPatron or e.objet or (e.outil and e.objets[1])
   if id then
@@ -250,7 +261,7 @@ end
 -- Une ligne d'apprentissage, cochée quand le socle voit le rang ou la recette appris (relu à chaque majBouton, pas deviné) ;
 -- sinon où l'apprendre (le PNJ le plus commode, ns.endroits).
 local function dessinerApprendre(r, e)
-  local fait = ns.appris(e, res.metier)
+  local fait = ns.appris(e, res.metier, res.guid)
   r.coche:SetShown(fait)
   r.icone.tex:SetDesaturated(fait)
   if fait then
@@ -259,7 +270,7 @@ local function dessinerApprendre(r, e)
     return
   end
   r.nom:SetText("|cfff2a640" .. texteApprendre(e) .. "|r")
-  local m = ns.meilleurEndroit(ns.endroits(e, res.metier))
+  local m = ns.meilleurEndroit(ns.endroits(e, res.metier, res.guid))
   r.detail:SetText("à apprendre avant l'étape suivante" .. (m and (" · " .. ns.lieu(m)) or e.patronHV and " · à l'hôtel des ventes" or ""))
 end
 local function cocher()
@@ -346,7 +357,8 @@ local function ecrireResume()
   local prix
   if res.sansHV then prix = "|cffe64d4dHV pas scanné : prix des marchands seulement.|r"
   else prix = "prix : " .. (res.scan and ("scan de l'HV du " .. res.scan) or ("cours de " .. tostring(res.fournisseur or "l'HV"))) end
-  resume.titre:SetText(("|cffffd100%s, de %d à %d|r · %s"):format(res.metier, res.de, res.a, prix))
+  local qui = ns.prenomAutre(res.guid)
+  resume.titre:SetText(("|cffffd100%s%s, de %d à %d|r · %s"):format(qui and (qui .. " · ") or "", res.metier, res.de, res.a, prix))
   local g, d = postes(res)
   resume.gauche:SetText(g)
   resume.droite:SetText(d)
@@ -380,16 +392,16 @@ end
 -- GetProfessions) ; au curseur atteint, la tranche se termine.
 local function majBouton()
   if not (frame and frame:IsShown() and choix) then return end
-  local e = ns.trancheEtat(choix)
+  local e = ns.trancheEtat(choix, perso)
   frame.title:SetText(e and ("Maîtrise · tranche %s"):format(e.texte) or "Maîtrise")
   etatB:SetText(e and "Mettre à jour le projet" or "En faire un projet")
-  etatB:SetEnabled(res ~= nil and res.metier == choix)
+  etatB:SetEnabled(res ~= nil and res.metier == choix and res.guid == (perso or UnitGUID("player")))
   if res then cocher() end
 end
 
 local function bulleTranche(self)
   GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-  local t = choix and ns.trancheDe(choix)
+  local t = choix and ns.trancheDe(choix, perso)
   if t then
     GameTooltip:AddLine("Mettre à jour le projet", 1, 0.82, 0)
     GameTooltip:AddLine(("Le projet tient aujourd'hui %s de %d à %d ; il prend la route affichée."):format(choix, t.de, t.a), 0.8, 0.8, 0.8, true)
@@ -405,11 +417,11 @@ end
 -- s'ouvre dans Composants. Clic droit, avec une tranche : ouvrir le projet, ou abandonner la tranche.
 local function clicTranche(_, bouton)
   if not choix then return end
-  local t = ns.trancheDe(choix)
+  local t = ns.trancheDe(choix, perso)
   if t and bouton == "RightButton" then
     MenuUtil.CreateContextMenu(etatB, function(_, root)
       root:CreateButton("Ouvrir le projet", function() Composants.Ouvrir(t.projet) end)
-      root:CreateButton("Abandonner la tranche", function() ns.trancheAbandonner(choix); majBouton() end)
+      root:CreateButton("Abandonner la tranche", function() ns.trancheAbandonner(choix, perso); majBouton() end)
     end)
     return
   end
@@ -421,19 +433,20 @@ end
 
 local function calculer()
   if not choix then return end
-  local r, err = ns.tranche(nil, choix, tonumber(curseurE:GetText()))
+  local r, err = ns.tranche(perso, choix, tonumber(curseurE:GetText()))
   if not r then print("|cffffd100Maîtrise :|r " .. err) return end
   curseurE:SetText(tostring(r.a)) -- ramené au plafond du personnage s'il le dépassait
   afficher(r)
   majBouton()
 end
 
-local function choisir(nom)
-  choix, res = nom, nil
+-- Choisit le métier nom du personnage guid (nil = le connecté).
+local function choisir(nom, guid)
+  choix, perso, res = nom, guid, nil
   if metierB then metierB:GenerateMenu() end -- choisi sans passer par le menu (à l'ouverture) : son texte suit
-  local rang = rangDe(nom) or 0
-  local t = ns.trancheDe(nom)
-  local plafond, raison = ns.plafondDe()
+  local rang = rangDe(nom, guid) or 0
+  local t = ns.trancheDe(nom, guid)
+  local plafond, raison = ns.plafondDe(guid)
   curseurE:SetText(tostring(t and math.min(t.a, plafond) or math.min(rang + 10, plafond)))
   plafondT:SetText(raison or "")
   dessinerFrise()
@@ -445,13 +458,20 @@ end
 local function construire()
   frame = lib.Fenetre("MaitriseFrame", "Maîtrise", 660, 520)
   metierB = CreateFrame("DropdownButton", nil, frame, "WowStyle1DropdownTemplate")
-  metierB:SetWidth(180)
+  metierB:SetWidth(220) -- « Riwanon · Travail du cuir (49) »
   metierB:SetPoint("TOPLEFT", 14, -40)
   metierB:SetupMenu(function(_, root)
     local liste = metiers()
     if #liste == 0 then root:CreateTitle("Aucun métier relevé (ouvre une fenêtre de métier)") end
-    for _, m in ipairs(liste) do
-      root:CreateRadio(("%s (%d)"):format(m.nom, m.rang), function(n) return choix == n end, choisir, m.nom)
+    local function radio(texte, nom, guid)
+      root:CreateRadio(texte, function() return choix == nom and perso == guid end, function() choisir(nom, guid) end)
+    end
+    for _, m in ipairs(liste) do radio(("%s (%d)"):format(m.nom, m.rang), m.nom, nil) end
+    -- Mes autres personnages (Maitrise#5) : « Riwanon · Forge (49) », d'après le dernier relevé de chacun.
+    local a = autres()
+    if #a > 0 then root:CreateDivider(); root:CreateTitle("Mes autres personnages") end
+    for _, p in ipairs(a) do
+      for _, m in ipairs(metiers(p.guid)) do radio(("%s · %s (%d)"):format(p.prenom, m.nom, m.rang), m.nom, p.guid) end
     end
   end)
   local jusque = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -473,7 +493,7 @@ local function construire()
   calculB:SetText("Calculer")
   calculB:SetScript("OnClick", calculer)
   etatB = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-  etatB:SetSize(240, 22)
+  etatB:SetSize(200, 22)
   etatB:SetPoint("LEFT", calculB, "RIGHT", 8, 0)
   etatB:SetText("En faire un projet")
   etatB:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -521,7 +541,7 @@ function ns.ouvrir()
   if not frame then construire() end
   frame:Show()
   onglet(1)
-  if not choix then
+  if not choix then -- le personnage connecté par défaut
     local premier = metiers()[1]
     if premier then choisir(premier.nom) else ecrireResume() end
   end

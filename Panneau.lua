@@ -78,7 +78,7 @@ local function bulle(self)
     if e.objetPatron then GameTooltip:SetItemByID(e.objetPatron) elseif e.cle then GameTooltip:SetSpellByID(e.cle) else GameTooltip:SetText(e.nom or "?") end
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine(("Apprendre %s — %s · %s"):format(e.nom or "?", e.source or "?", e.prix and lib.ArgentCourt(e.prix) or "prix inconnu"), 0.95, 0.65, 0.25)
-    local m = ns.meilleurEndroit(ns.endroits(e, metierOuvert()))
+    local m = ns.meilleurEndroit(ns.endroits(e, (metierOuvert())))
     if m then GameTooltip:AddLine(ns.lieu(m), 0.8, 0.8, 0.8) end
     GameTooltip:AddLine("Clic : un point sur la carte · Maj+clic : le lien dans le chat", 0.6, 0.6, 0.6)
   else
@@ -104,7 +104,7 @@ local function clic(self, bouton)
       if l then ChatEdit_InsertLink(l) end
     end
   elseif bouton == "LeftButton" and e.apprendre then
-    ns.surCarte(e, metierOuvert())
+    ns.surCarte(e, (metierOuvert()))
   elseif bouton == "LeftButton" and connue(e) then
     C_TradeSkillUI.OpenRecipe(e.cle)
   end

@@ -432,6 +432,33 @@ AzerothCommune:Signaler("métiers et compétences")
 assert(MaitriseDB.tranches[UnitGUID("player")].Forge == nil and p4.tenu == nil, "tranche terminée au signal, sans rien lire d'autre")
 print("Maîtrise : tranche tenue (créer, une par métier, progression, recalcul garde les choix, fin, abandon) OK")
 
+-- Un autre de mes personnages (Maitrise#5) : sa tranche part de sa compétence relevée, son curseur est plafonné par son
+-- niveau, elle est tenue à son nom (au plus une par personnage et par métier, à côté de celle du connecté).
+local AUTRE = "Player-6942-000000AB"
+res = scenario({ rang = 5, curseur = 10, marchands = { [M] = 10 }, recettes = LAME })
+assert(ns.trancheCreer("Forge", res))
+AzerothCommuneDB.chars[AUTRE] = { nom = "Riwanon Kerys", professions = { { name = "Forge", rank = 49, max = 75 } },
+  character = { level = 19, faction = "Horde" } }
+local ra = assert(Maitrise.Tranche(AUTRE, "Forge", 200))
+assert(ra.de == 49 and ra.a == 150 and ra.raisonPlafond == "150 max : Expert au niveau 20" and ra.guid == AUTRE,
+  "de sa compétence, plafonnée par son niveau : " .. ra.de .. "-" .. ra.a)
+assert(ns.plafondDe(AUTRE) == 150 and ns.plafondDe() == 300, "chacun son plafond")
+local ta = assert(ns.trancheCreer("Forge", ra))
+local _, pa = ns.trancheDe("Forge", AUTRE)
+local _, pm = ns.trancheDe("Forge")
+assert(pa and pm and pa ~= pm and pa.tenu == "Maîtrise : Riwanon, Forge de 49 à 150" and pm.tenu == "Maîtrise : Forge de 5 à 10",
+  "deux tranches, une par personnage : " .. tostring(pa and pa.tenu))
+assert(MaitriseDB.tranches[AUTRE].Forge == ta and ns.trancheEtat("Forge", AUTRE).texte == "Riwanon, Forge 49 / 150")
+assert(ns.trancheCreer("Forge", ra) and select(2, ns.trancheDe("Forge", AUTRE)) == pa, "repris, pas un autre projet")
+-- Sa faction pour les endroits : les maîtres de la Horde.
+acns.recettesPNJ, acns.recettesMaitres = { [11] = { "Vayn", 1453, 45, 60, "Alliance" }, [12] = { "Grak", 1454, 10, 20, "Horde" } }, { Forge = { 11, 12 } }
+assert(ns.endroits({ rang = 150 }, "Forge", AUTRE)[1].nom == "Grak" and ns.endroits({ rang = 150 }, "Forge")[1].nom == "Vayn")
+acns.recettesPNJ, acns.recettesMaitres = nil, nil
+Composants.Supprimer(pa.id); Composants.Supprimer(pm.id)
+assert(ns.trancheDe("Forge", AUTRE) == nil and ns.trancheDe("Forge") == nil)
+AzerothCommuneDB.chars[AUTRE] = nil
+print("Maîtrise : un autre de mes personnages (sa compétence, son plafond, sa tranche, sa faction) OK")
+
 -- Le panneau de la fenêtre de métier : la tranche garde les lignes de la frise (sans l'objectif), le panneau les place à la
 -- compétence. RP : « A » (maître, 1, jaune 10, gris 20) de 1 à 10, « B » (patron vendu, 10, jaune 20, gris 30) de 10 à 30.
 rang(1)
