@@ -325,11 +325,11 @@ function ns.route(rs, achat, revente, FROM, TO)
     f.net = f.coutNet / f.fois -- le net par fabrication : composants − revente du produit (Maitrise#12)
     f.coutNet = nil
     f.fois = math.ceil(f.fois - 1e-9)
-    f.temps = f.fois * (f.cast or 0) -- secondes : fabrications moyennes × temps d'incantation (AzerothCommune#70)
+    f.temps = f.cast and f.fois * f.cast -- secondes : fabrications × temps d'incantation (AzerothCommune#70) ; nil : inconnu
     f.cast = nil
   end
-  local temps = 0
-  for _, f in ipairs(fab) do temps = temps + f.temps end
+  local temps, tempsIncomplet = 0, nil
+  for _, f in ipairs(fab) do if f.temps then temps = temps + f.temps else tempsIncomplet = true end end
   -- Le coût « une fois sur dix » (Maitrise#12) : le net moyen, plus pour chaque étape non orange son net par fabrication
   -- (s'il est positif) × les fabrications de plus du 90e centile. Somme des 90e centiles étape par étape : une estimation
   -- prudente (le vrai 90e centile de la somme est plus bas, les aléas se compensent un peu ; mais les étapes à gain et
@@ -347,7 +347,7 @@ function ns.route(rs, achat, revente, FROM, TO)
   return { de = FROM, a = TO, fabrications = fab, achats = bestPlan.list, totalAchats = bestPlan.achats,
     patrons = bestPlan.patrons, total = bestPlan.achats + bestPlan.patrons, revente = bestPlan.revente, trous = trous,
     sansPrix = sp, incomplet = bestPlan.incomplet, net = net, netUneSurDix = math.floor(dix + 0.5),
-    apprentissages = apprentissages, temps = temps }
+    apprentissages = apprentissages, temps = temps, tempsIncomplet = tempsIncomplet }
 end
 
 -- Les outils de la route (AzerothCommune#71) : chaque étape porte les siens { { nom, objets, a } }, et res.outils les liste
@@ -403,7 +403,8 @@ end
 -- estimation prudente : voir ns.route), apprentissages = { { niveau, cle, nom, source (« Maître », « Patron », « Patron à l'HV »), prix
 -- (nil : inconnu), objetPatron } } (les recettes à apprendre, à leur niveau ; sans les connues) } ; chaque fabrication porte
 -- aussi net (composants − revente du produit, par fabrication, en cuivre), temps (secondes : fabrications × temps
--- d'incantation, AzerothCommune#70) et outils (voir ns.outils) ; temps = la somme des étapes ; outils = voir ns.outils }, ou
+-- d'incantation, AzerothCommune#70 ; nil : inconnu, recette vue absente de la réserve) et outils (voir ns.outils) ; temps =
+-- la somme des étapes connues, tempsIncomplet = true si l'une ne l'est pas ; outils = voir ns.outils }, ou
 -- nil et la raison.
 -- ponytail: le stock n'entre pas dans la route (tout acheté) ; Composants le déduit dans les Besoins du projet de
 -- tranche (Maitrise#3).

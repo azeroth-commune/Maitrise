@@ -48,7 +48,6 @@ local function duree(s)
   if s < 3600 then return math.floor(s / 60 + 0.5) .. " min" end
   return ("%d h %02d"):format(math.floor(s / 3600), math.floor(s % 3600 / 60))
 end
-ns.duree = duree
 -- Les outils d'une étape (AzerothCommune#71) : « Marteau de forgeron : tu l'as » en vert, sinon en orange.
 local function texteOutils(e)
   local t = {}
@@ -68,7 +67,7 @@ local function detailEtape(e)
   -- répété ici : il a sa ligne « Apprendre » (Maitrise#13).
   local net = e.net >= 0 and ("net " .. lib.ArgentCourt(math.floor(e.net + 0.5))) or ("gain " .. lib.ArgentCourt(math.floor(-e.net + 0.5)))
   return ("de %d à %d · %s%s · %s · %s par objet%s"):format(e.de, e.a, fab, e.incertaine and " · |cffff9933incertaine|r" or "",
-    duree(e.temps or 0), net, texteOutils(e))
+    e.temps and duree(e.temps) or "temps inconnu", net, texteOutils(e))
 end
 -- Une ligne d'apprentissage : « Apprendre X — Maître · 25 pa ».
 local function texteApprendre(e)
@@ -88,7 +87,7 @@ local function bulle(self)
   local e = self:GetParent().etape
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
   if e.outil then
-    GameTooltip:SetItemByID(e.objets[1])
+    if e.objets[1] then GameTooltip:SetItemByID(e.objets[1]) else GameTooltip:SetText(e.nom) end
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine(("Outil : %s, à avoir dans tes sacs pour cette étape"):format(e.nom), 1, 0.6, 0.2, true)
     GameTooltip:AddLine("Maj+clic : le lien dans le chat", 0.6, 0.6, 0.6)
@@ -207,7 +206,7 @@ local function dessinerFrise()
     traitsEtape(r, e)
     if e.outil then
       r.point:SetColorTexture(0.85, 0.85, 0.85, 0.7)
-      r.icone.tex:SetTexture(C_Item.GetItemIconByID(e.objets[1]) or "Interface\\Icons\\INV_Misc_QuestionMark")
+      r.icone.tex:SetTexture(e.objets[1] and C_Item.GetItemIconByID(e.objets[1]) or "Interface\\Icons\\INV_Misc_QuestionMark")
       r.nom:SetText("|cffff9933Outil : " .. e.nom .. "|r")
       r.detail:SetText(e.inconnu and "sacs pas encore relevés : à avoir pour l'étape suivante" or "à avoir dans tes sacs pour l'étape suivante")
     elseif e.apprendre then
@@ -253,7 +252,7 @@ local function postes(r)
   return ("Composants : %s\nVentes au marchand : %s\nMaître et patrons : %s"):format(lib.ArgentCourt(r.totalAchats),
       lib.ArgentCourt(r.revente), appr),
     ("|cffffd100Total net : %s|r\nJusqu'à %s une fois sur dix\nTemps de fabrication : %s"):format(lib.ArgentCourt(r.net),
-      lib.ArgentCourt(r.netUneSurDix), duree(r.temps or 0))
+      lib.ArgentCourt(r.netUneSurDix), duree(r.temps or 0) .. (r.tempsIncomplet and " et des temps inconnus" or ""))
 end
 -- La frise et le tableau des achats démarrent juste sous la dernière ligne de l'en-tête : sans avertissement, pas de vide
 -- réservé (retour de Virgile, captures du 23/11). haut = hauteur des avertissements écrits (0 sans).
