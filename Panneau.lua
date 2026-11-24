@@ -222,9 +222,9 @@ local function rafraichir()
   panneau:Show()
 end
 
--- Fenêtre de métier ouverte, fermée ou mise à jour (une recette apprise), compétence changée (les métiers relus et signalés
--- par le socle, AzerothCommune#69 : pas SKILL_LINES_CHANGED, que le socle n'aurait pas encore relu), tranche tenue ou lâchée
--- (Composants signale tout changement de projet) : au plus une fois par image d'événements.
+-- Fenêtre de métier ouverte, fermée ou mise à jour (une recette apprise), compétence changée (le signal des métiers du
+-- socle, émis à chaque SKILL_LINES_CHANGED, AzerothCommune#69 ; la tranche finie y est déjà retirée), tranche tenue ou
+-- lâchée (Composants signale tout changement de projet) : au plus une fois par image d'événements.
 local prevu
 local function bientot()
   if prevu then return end
