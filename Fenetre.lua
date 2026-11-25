@@ -413,21 +413,22 @@ local function bulleTranche(self)
   GameTooltip:Show()
 end
 
--- Clic : la route affichée devient la tranche (créée, ou le même projet mis à jour : choix de case gardés) et le projet
--- s'ouvre dans Composants. Clic droit, avec une tranche : ouvrir le projet, ou abandonner la tranche.
+-- Clic : la route affichée devient la tranche (créée, ou le même projet mis à jour : choix de case gardés), Maîtrise se
+-- ferme et le projet s'ouvre dans Composants, en Préparer (Composants s'en charge ; Maîtrise ne sert qu'à choisir,
+-- Maitrise#30). Clic droit, avec une tranche : ouvrir le projet, ou abandonner la tranche.
 local function clicTranche(_, bouton)
   if not choix then return end
   local t = ns.trancheDe(choix, perso)
   if t and bouton == "RightButton" then
     MenuUtil.CreateContextMenu(etatB, function(_, root)
-      root:CreateButton("Ouvrir le projet", function() Composants.Ouvrir(t.projet) end)
+      root:CreateButton("Ouvrir le projet", function() frame:Hide(); Composants.Ouvrir(t.projet) end)
       root:CreateButton("Abandonner la tranche", function() ns.trancheAbandonner(choix, perso); majBouton() end)
     end)
     return
   end
   local nouvelle, err = ns.trancheCreer(choix, res)
   if not nouvelle then print("|cffffd100Maîtrise :|r " .. err)
-  else Composants.Ouvrir(nouvelle.projet) end
+  else frame:Hide(); Composants.Ouvrir(nouvelle.projet) end
   majBouton()
 end
 
