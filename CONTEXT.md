@@ -13,7 +13,7 @@ La suite de recettes d'une montée, point par point, la moins chère aux prix d'
 _Avoid_: guide, chemin, étapes
 
 **Tranche**:
-La part de la route qu'on fait maintenant, du niveau actuel jusqu'au curseur ; optimisée seule avec les prix du moment, elle devient un projet tenu dans Composants (ses Besoins = ce qu'il faut pour cette tranche seulement).
+La part de la route qu'on fait maintenant, du niveau actuel jusqu'au curseur ; optimisée seule avec les prix du moment, elle devient un projet tenu dans Composants (ses Besoins = ce qu'il faut pour cette tranche seulement) : « En faire un projet » ferme Maîtrise et ouvre le projet en Préparer. Maîtrise ne sert qu'à choisir ; on fabrique dans Composants. Recalculer une tranche lancée remet son projet en Préparer.
 _Avoid_: session, palier (réservé aux paliers de prix de l'HV)
 
 **Étape**:
