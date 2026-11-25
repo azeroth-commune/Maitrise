@@ -2,9 +2,7 @@
 -- fabrication, raison « Maîtrise : <métier> de X à Y »). Ici : le stockage, créer, recalculer, finir, la progression
 -- (compétence / curseur : rien d'autre, ni avance ni décompte des fabrications). Pas de fenêtre : testable seule (check.lua).
 -- MaitriseDB.tranches[guid][métier] = { projet (identité Composants), de (compétence à la création ou au dernier calcul),
--- a (le curseur), etapes (les lignes de la frise de la route tenue, pour le panneau de la fenêtre de métier : voir
--- ns.etapesFrise, sans l'objectif) } ; une tranche gardée par une version plus ancienne porte encore faites (ignoré) et
--- pas toujours etapes.
+-- a (le curseur) } ; une tranche gardée par une version plus ancienne porte encore faites et etapes (ignorés).
 -- Au plus une par personnage et par métier ; celle d'un autre de mes personnages se prépare depuis le connecté (Maitrise#5). Rien ne se recalcule seul (pas d'état deviné) : seul un clic le fait.
 local _, ns = ...
 
@@ -52,8 +50,7 @@ end
 -- Les lignes de la frise d'une route res (ns.tranche), dans l'ordre : ses fabrications, ses trous ({ de, a, trou }) et ses
 -- apprentissages ({ de = niveau, apprendre, … }) à leur niveau, avant l'étape qui les demande (même niveau :
 -- l'apprentissage d'abord), les outils qui manquent ({ de = niveau, outil, nom, objets, inconnu : sacs pas relevés },
--- AzerothCommune#71) comme eux, puis l'objectif ({ de = res.a, fin }). La frise de la fenêtre et le panneau les montrent
--- (le panneau sans les outils : la tranche ne les garde pas).
+-- AzerothCommune#71) comme eux, puis l'objectif ({ de = res.a, fin }). La frise de la fenêtre les montre.
 function ns.etapesFrise(res)
   local etapes = {}
   for _, f in ipairs(res.fabrications) do etapes[#etapes + 1] = f end
@@ -79,9 +76,6 @@ function ns.etapesFrise(res)
   return etapes
 end
 
--- Ce que la tranche garde de chaque ligne de la frise (le panneau la redessine sans recalculer).
-local GARDE = { "de", "a", "cle", "nom", "fois", "objet", "fourchette", "trou", "apprendre", "source", "prix", "objetPatron", "rang" }
-
 -- Tient le projet p avec la route res, au curseur : met la tranche (du personnage de la route, res.guid) à jour. Rend la tranche.
 local function tenir(p, metier, res, curseur)
   -- Le nom du projet porte les niveaux, comme sa raison (liste « Projets » de Composants), et les suit au recalcul.
@@ -89,15 +83,7 @@ local function tenir(p, metier, res, curseur)
   Composants.Tenir(p, raison(metier, res.de, curseur, res.guid), lignes(res))
   local g = res.guid
   db().tranches[g] = db().tranches[g] or {}
-  local etapes = {}
-  for _, e in ipairs(ns.etapesFrise(res)) do
-    if not e.fin and not e.outil then
-      local l = {}
-      for _, k in ipairs(GARDE) do l[k] = e[k] end
-      etapes[#etapes + 1] = l
-    end
-  end
-  local t = { projet = p.id, de = res.de, a = curseur, etapes = etapes }
+  local t = { projet = p.id, de = res.de, a = curseur }
   db().tranches[g][metier] = t
   return t
 end
