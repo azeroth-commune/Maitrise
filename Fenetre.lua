@@ -34,7 +34,7 @@ end
 
 local function nomObjet(id) return lib.NomObjet(id, lib:Lire("objets") or {}, nomsDeSession) end
 local COL_ACHATS = {
-  { key = "nom", title = "Objet", w = 240, get = function(a) return nomObjet(a.id) end, asc = true },
+  { key = "nom", title = "Objet", w = 240, get = function(a) return nomObjet(a.id) end, asc = true, extensible = true },
   { key = "qty", title = "Quantité", w = 70, align = "RIGHT", get = function(a) return a.qty end },
   { key = "cout", title = "Coût", w = 90, align = "RIGHT", get = function(a) return a.cout end, fmt = lib.ArgentCourt },
 }
@@ -181,15 +181,20 @@ local function clic(self, bouton)
 end
 
 local function construireFrise(parent)
-  frise = { etapes = {}, largeur = 600 }
+  frise = { etapes = {} }
   frise.scroll = CreateFrame("ScrollFrame", nil, parent, "UIPanelScrollFrameTemplate")
   frise.scroll:SetPoint("TOPLEFT", 14, -HAUT)
   frise.scroll:SetPoint("BOTTOMRIGHT", -32, 14)
   frise.contenu = CreateFrame("Frame", nil, frise.scroll)
-  frise.contenu:SetSize(frise.largeur, 1)
+  frise.contenu:SetSize(600, 1)
   frise.scroll:SetScrollChild(frise.contenu)
+  -- Le contenu prend la largeur du défilement : la fenêtre élargie, les noms et détails des étapes s'allongent. Aussi au
+  -- retour sur l'onglet Route, si la fenêtre a changé de taille pendant les Achats.
+  local function ajuster() frise.contenu:SetWidth(frise.scroll:GetWidth()) end
+  frise.scroll:SetScript("OnSizeChanged", ajuster)
+  frise.scroll:SetScript("OnShow", ajuster)
   frise.axe = frise.contenu:CreateTexture(nil, "BACKGROUND")
-  frise.axe:SetColorTexture(0.66, 0.56, 1, 0.35)
+  frise.axe:SetColorTexture(0.6, 0.6, 0.6, 0.5) -- gris neutre : les couleurs sont celles des recettes
   frise.axe:SetPoint("TOPLEFT", AXE_X - 1, -ETAPE_H / 2)
   frise.axe:SetWidth(2)
 end
@@ -198,8 +203,9 @@ local function cadreEtape(i)
   local r = frise.etapes[i]
   if r then return r end
   r = CreateFrame("Frame", nil, frise.contenu)
-  r:SetSize(frise.largeur, ETAPE_H)
+  r:SetHeight(ETAPE_H)
   r:SetPoint("TOPLEFT", 0, -(i - 1) * ETAPE_H)
+  r:SetPoint("TOPRIGHT", 0, -(i - 1) * ETAPE_H)
   r.niveau = r:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   r.niveau:SetPoint("RIGHT", r, "LEFT", AXE_X - 10, 0)
   -- Un tiret qui part du trait vers l'étape (pas un point coloré sur l'axe : il brouillait les couleurs des recettes).
@@ -489,12 +495,12 @@ local function construire()
   plafondT = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   plafondT:SetPoint("TOPLEFT", curseurE, "BOTTOMLEFT", -4, -3)
   calculB = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-  calculB:SetSize(100, 22)
+  calculB:SetSize(90, 22)
   calculB:SetPoint("LEFT", curseurE, "RIGHT", 12, 0)
   calculB:SetText("Calculer")
   calculB:SetScript("OnClick", calculer)
   etatB = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-  etatB:SetSize(200, 22)
+  etatB:SetSize(170, 22) -- « Mettre à jour le projet » ; la rangée tient dans les 660 px de départ
   etatB:SetPoint("LEFT", calculB, "RIGHT", 8, 0)
   etatB:SetText("En faire un projet")
   etatB:RegisterForClicks("LeftButtonUp", "RightButtonUp")

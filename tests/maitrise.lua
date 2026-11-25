@@ -476,3 +476,33 @@ test("Maîtrise : préparer la montée d'un autre de mes personnages", function(
     if ComposantsFrame then ComposantsFrame:Hide() end
     if not ok then error(err, 0) end
 end)
+
+-- Maitrise#32 : la fenêtre du socle, redimensionnable ; la rangée des réglages tient dans les 660 px de départ, les étapes
+-- de la frise et la colonne Objet des achats prennent la largeur gagnée. Asynchrone : le changement de taille
+-- (OnSizeChanged) arrive à l'image suivante.
+local function ensuite(done, fn)
+    C_Timer.After(0.05, function()
+        local ok, err = pcall(fn)
+        if not ok then done(function() error(err, 0) end) end
+    end)
+end
+async_test("Maîtrise : la fenêtre s'agrandit, la frise et les achats suivent", function(done)
+    SlashCmdList.MAITRISE("")
+    MaitriseFrame:SetSize(660, 520)
+    local etat = bouton("En faire un projet") or bouton("Mettre à jour le projet")
+    assertNotNil(etat, "bouton du projet")
+    assertTrue(etat:GetRight() <= MaitriseFrame:GetRight() - 8, "le bouton du projet ne touche pas le bord droit")
+    bouton("Calculer"):Click()
+    ensuite(done, function()
+        local r = assert(etapes()[1], "une étape")
+        local avant = r:GetWidth()
+        MaitriseFrame:SetSize(900, 700)
+        ensuite(done, function()
+            done(function()
+                assertEquals(math.floor(avant + 240 + 0.5), math.floor(r:GetWidth() + 0.5), "l'étape s'élargit avec la fenêtre")
+                MaitriseFrame:SetSize(660, 520)
+                MaitriseFrame:Hide()
+            end)
+        end)
+    end)
+end)
