@@ -115,8 +115,10 @@ test("Maîtrise : la tranche devient un projet tenu, se met à jour et se termin
     assertNotNil(projet, "projet « Maîtrise : Forge de 1 à 30 » (les niveaux dans le nom)")
     assertEquals("Maîtrise : Forge de 1 à 30", projet.tenu)
     assertTrue(ComposantsFrame:IsShown(), "le projet créé s'ouvre dans Composants")
+    assertFalse(MaitriseFrame:IsShown(), "Maîtrise se ferme : on fabrique dans Composants (Maitrise#30)")
     assertEquals(projet, ComposantsDB.projets[ComposantsDB.courant], "sur ce projet")
     ComposantsFrame:Hide()
+    SlashCmdList.MAITRISE("")
     assertTrue(#projet.lines > 0 and projet.lines[1].recette ~= nil and projet.lines[1].fois >= 1, "lignes fabrication")
     -- Avec une tranche : le bouton enregistre la route affichée (« Mettre à jour le projet ») ; la progression est dans le
     -- titre de la fenêtre, plus sur un bouton.
@@ -134,7 +136,9 @@ test("Maîtrise : la tranche devient un projet tenu, se met à jour et se termin
     curseur:SetText("30")
     bouton("Calculer"):Click()
     maj:Click()
-    if ComposantsFrame then ComposantsFrame:Hide() end
+    assertTrue(ComposantsFrame:IsShown() and not MaitriseFrame:IsShown(), "mis à jour : Maîtrise fermée, le projet montré")
+    ComposantsFrame:Hide()
+    SlashCmdList.MAITRISE("")
     assertEquals("acheter", projet.choix[2840], "choix de case gardé")
     assertEquals("Maîtrise : Forge de 11 à 30", projet.tenu)
     assertEquals("Maîtrise : Forge de 11 à 30", projet.name, "le nom suit les niveaux")
@@ -450,6 +454,7 @@ test("Maîtrise : préparer la montée d'un autre de mes personnages", function(
         assertEquals(150, res.a)
         bouton("En faire un projet"):Click()
         if ComposantsFrame then ComposantsFrame:Hide() end
+        SlashCmdList.MAITRISE("") -- Maîtrise s'est fermée sur le projet : on la rouvre, toujours sur Riwanon
         assertNotNil(MaitriseDB.tranches[AUTRE] and MaitriseDB.tranches[AUTRE].Forge, "la tranche tenue au nom de Riwanon")
         assertNil(MaitriseDB.tranches[guid] and MaitriseDB.tranches[guid].Forge, "pas celle du connecté")
         local p
