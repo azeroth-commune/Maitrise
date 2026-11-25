@@ -463,7 +463,7 @@ local function choisir(nom, guid)
 end
 
 local function construire()
-  frame = lib.Fenetre("MaitriseFrame", "Maîtrise", 660, 520)
+  frame = lib.Fenetre("MaitriseFrame", "Maîtrise", 660, 380) -- 380 : la frise défile
   metierB = CreateFrame("DropdownButton", nil, frame, "WowStyle1DropdownTemplate")
   metierB:SetWidth(220) -- « Riwanon · Travail du cuir (49) »
   metierB:SetPoint("TOPLEFT", 14, -40)
