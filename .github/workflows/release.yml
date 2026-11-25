@@ -1,0 +1,15 @@
+# Publie sur CurseForge à chaque étiquette poussée : v1.2.3-beta1 → Beta, v1.2.3 → Release.
+name: CurseForge
+on:
+  push:
+    tags: ['v*']
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      CF_API_KEY: ${{ secrets.CF_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: BigWigsMods/packager@v2

@@ -1,0 +1,9 @@
+package-as: Maitrise
+ignore:
+  - tests
+  - check.lua
+  - docs
+  - CLAUDE.md
+  - CONTEXT.md
+# ponytail: required-dependencies azeroth-commune et composants à remettre quand ils sont validés (erreur 1018)
+
