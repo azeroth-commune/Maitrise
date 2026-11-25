@@ -421,7 +421,7 @@ local function clicTranche(_, bouton)
   local t = ns.trancheDe(choix, perso)
   if t and bouton == "RightButton" then
     MenuUtil.CreateContextMenu(etatB, function(_, root)
-      root:CreateButton("Ouvrir le projet", function() Composants.Ouvrir(t.projet) end)
+      root:CreateButton("Ouvrir le projet", function() frame:Hide(); Composants.Ouvrir(t.projet) end)
       root:CreateButton("Abandonner la tranche", function() ns.trancheAbandonner(choix, perso); majBouton() end)
     end)
     return
