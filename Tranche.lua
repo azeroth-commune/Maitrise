@@ -78,7 +78,7 @@ end
 
 -- Tient le projet p avec la route res, au curseur : met la tranche (du personnage de la route, res.guid) à jour. Rend la tranche.
 local function tenir(p, metier, res, curseur)
-  -- Le nom du projet porte les niveaux, comme sa raison (liste « Projets » de Composants), et les suit au recalcul.
+  -- Le nom du projet porte les niveaux, comme sa raison (colonne des projets de Composants), et les suit au recalcul.
   Composants.Renommer(p, raison(metier, res.de, curseur, res.guid))
   Composants.Tenir(p, raison(metier, res.de, curseur, res.guid), lignes(res))
   local g = res.guid
