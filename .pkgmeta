@@ -5,5 +5,7 @@ ignore:
   - docs
   - CLAUDE.md
   - CONTEXT.md
-# ponytail: required-dependencies azeroth-commune et composants à remettre quand ils sont validés (erreur 1018)
 
+required-dependencies:
+  - azeroth-commune
+# ponytail: composants (requis) à ajouter quand le projet Composants est validé (erreur 1018 avant)
