@@ -1,0 +1,17 @@
+name: Signaler un problème
+description: Un bug, une erreur Lua, quelque chose d'étrange en jeu
+labels: [needs-triage]
+body:
+  - type: textarea
+    id: quoi
+    attributes:
+      label: Ce qui s'est passé
+      description: Ce que tu faisais, ce qui s'est passé, ce que tu attendais.
+    validations:
+      required: true
+  - type: textarea
+    id: rapport
+    attributes:
+      label: Rapport de /ac retour
+      description: En jeu, tape /ac retour (ou bouton de minicarte → Signaler un problème), copie le texte (Ctrl+C) et colle-le ici.
+      render: text
