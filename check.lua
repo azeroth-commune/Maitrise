@@ -457,3 +457,17 @@ Composants.Supprimer(pa.id); Composants.Supprimer(pm.id)
 assert(ns.trancheDe("Forge", AUTRE) == nil and ns.trancheDe("Forge") == nil)
 AzerothCommuneDB.chars[AUTRE] = nil
 print("Maîtrise : un autre de mes personnages (sa compétence, son plafond, sa tranche, sa faction) OK")
+
+-- Sans Composants (dépendance optionnelle) : la route se calcule, pas de tranche, et celle gardée n'est pas oubliée.
+res = scenario({ rang = 5, curseur = 10, marchands = { [M] = 10 }, recettes = LAME })
+local tg = assert(ns.trancheCreer("Forge", res))
+local C = Composants; Composants = nil
+assert(Maitrise.Tranche(nil, "Forge", 10), "la route sans Composants")
+assert(ns.trancheDe("Forge") == nil and ns.trancheEtat("Forge") == nil, "pas de tranche sans Composants")
+local ok, err = ns.trancheCreer("Forge", res)
+assert(not ok and err:find("Composants"), "créer une tranche demande Composants")
+ns.tranchesSuivre(); ns.trancheAbandonner("Forge")
+assert(MaitriseDB.tranches[UnitGUID("player")].Forge == tg, "la tranche gardée attend Composants")
+Composants = C
+assert(ns.trancheDe("Forge") == tg, "Composants revenu : la tranche aussi")
+print("Maîtrise : sans Composants (la route seule, tranche gardée) OK")

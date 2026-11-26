@@ -27,7 +27,9 @@ local function raison(metier, de, a, guid)
 end
 
 -- La tranche (GUID, nil = le connecté) d'un métier et son projet ; un projet supprimé dans Composants : tranche oubliée.
+-- Sans Composants (dépendance optionnelle) : pas de tranche, et celles gardées attendent son retour sans être oubliées.
 function ns.trancheDe(metier, guid)
+  if not Composants then return nil end
   guid = guid or UnitGUID("player")
   local t = (db().tranches[guid] or {})[metier]
   if not t then return nil end
@@ -91,6 +93,7 @@ end
 -- Crée la tranche du métier d'après la route res (ns.tranche) : un projet « Maîtrise : <métier> de X à Y » tenu ; celui de la
 -- tranche déjà là est repris. Rend la tranche, ou nil et la raison.
 function ns.trancheCreer(metier, res)
+  if not Composants then return nil, "installe Composants pour suivre une tranche" end
   if not res then return nil, "calcule d'abord la tranche (Calculer)" end
   -- Une route calculée avant un gain de compétence (ou avant la fin d'une tranche) ne fait pas de tranche : elle partirait
   -- du mauvais niveau, ou serait déjà finie.

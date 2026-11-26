@@ -8,4 +8,5 @@ ignore:
 
 required-dependencies:
   - azeroth-commune
+optional-dependencies:
   - composants

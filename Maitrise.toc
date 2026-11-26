@@ -5,7 +5,8 @@
 ## Notes: Monter un métier au moindre coût, tranche par tranche : choisis jusqu'où tu montes ce soir, Maîtrise calcule la route (quelle recette, combien de fois) aux prix de l'HV du moment, réemplois compris et revente au marchand déduite. /maitrise
 ## Version: 0.1.0
 ## IconTexture: Interface\Icons\INV_Misc_Book_11
-## Dependencies: AzerothCommune, Composants
+## Dependencies: AzerothCommune
+## OptionalDeps: Composants
 ## SavedVariables: MaitriseDB
 ## X-Curse-Project-ID: 1830067
 Route.lua

@@ -155,7 +155,7 @@ local function bulle(self)
     if #ou > 3 then GameTooltip:AddLine(("et %d autres"):format(#ou - 3), 0.8, 0.8, 0.8) end
     GameTooltip:AddLine(#ou > 0 and "Clic : un point sur la carte (ta zone, ton continent d'abord)" or (e.patronHV and "À l'hôtel des ventes" or "Où l'apprendre : inconnu"), 0.6, 0.6, 0.6)
     if e.cle or e.objetPatron then GameTooltip:AddLine("Maj+clic : le lien dans le chat", 0.6, 0.6, 0.6) end
-    if e.objetPatron then GameTooltip:AddLine("Ctrl+clic droit : dans le Brouillon de Composants", 0.6, 0.6, 0.6) end
+    if e.objetPatron and Composants then GameTooltip:AddLine("Ctrl+clic droit : dans le Brouillon de Composants", 0.6, 0.6, 0.6) end
     GameTooltip:Show()
     return
   end
@@ -164,7 +164,7 @@ local function bulle(self)
   GameTooltip:AddLine(("De %d à %d : %d fabrication(s)"):format(e.de, e.a, e.fois), 1, 0.82, 0)
   for _, c in ipairs(e.composants) do GameTooltip:AddLine(("%d × %s"):format(c.qty * e.fois, nomObjet(c.id)), 0.8, 0.8, 0.8) end
   GameTooltip:AddLine("Maj+clic : le lien dans le chat", 0.6, 0.6, 0.6)
-  if e.objet then GameTooltip:AddLine("Ctrl+clic droit : dans le Brouillon de Composants", 0.6, 0.6, 0.6) end
+  if e.objet and Composants then GameTooltip:AddLine("Ctrl+clic droit : dans le Brouillon de Composants", 0.6, 0.6, 0.6) end
   GameTooltip:Show()
 end
 local function clic(self, bouton)
@@ -400,6 +400,7 @@ local function majBouton()
   if not (frame and frame:IsShown() and choix) then return end
   local e = ns.trancheEtat(choix, perso)
   frame.title:SetText(e and ("Maîtrise · tranche %s"):format(e.texte) or "Maîtrise")
+  if not etatB then return end
   etatB:SetText(e and "Mettre à jour le projet" or "En faire un projet")
   etatB:SetEnabled(res ~= nil and res.metier == choix and res.guid == (perso or UnitGUID("player")))
   if res then cocher() end
@@ -499,14 +500,17 @@ local function construire()
   calculB:SetPoint("LEFT", curseurE, "RIGHT", 12, 0)
   calculB:SetText("Calculer")
   calculB:SetScript("OnClick", calculer)
-  etatB = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-  etatB:SetSize(170, 22) -- « Mettre à jour le projet » ; la rangée tient dans les 660 px de départ
-  etatB:SetPoint("LEFT", calculB, "RIGHT", 8, 0)
-  etatB:SetText("En faire un projet")
-  etatB:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-  etatB:SetScript("OnClick", clicTranche)
-  etatB:SetScript("OnEnter", bulleTranche)
-  etatB:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  -- Le bouton du projet n'existe qu'avec Composants (dépendance optionnelle) : sans lui, Maîtrise montre la route seule.
+  if Composants then
+    etatB = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    etatB:SetSize(170, 22) -- « Mettre à jour le projet » ; la rangée tient dans les 660 px de départ
+    etatB:SetPoint("LEFT", calculB, "RIGHT", 8, 0)
+    etatB:SetText("En faire un projet")
+    etatB:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    etatB:SetScript("OnClick", clicTranche)
+    etatB:SetScript("OnEnter", bulleTranche)
+    etatB:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  end
   C_Timer.NewTicker(5, majBouton)
   lib:QuandReleve("métiers et compétences", majBouton)
   resume = {}
