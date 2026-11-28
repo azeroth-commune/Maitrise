@@ -40,7 +40,7 @@ _Avoid_: marge, intervalle de confiance
 Une recette de la route que le personnage ne connaît pas encore (chez un maître, ou par un patron vendu ou à l'HV), ou un rang (Compagnon, Expert, Artisan) que la tranche dépasse ; une ligne à part dans la frise, au niveau de sa première étape (un rang : quand le maître l'enseigne), avec sa source, son prix (« prix inconnu » sinon) et où l'apprendre (maître ou marchand de la faction). Cochée toute seule quand le socle la voit apprise. Une recette connue n'en a pas ; le patron n'est pas répété sur l'étape.
 
 **Plafond**:
-Le plus haut niveau de métier que le personnage peut débloquer à son niveau (75, puis Compagnon 150 au niveau 10, Expert 225 au niveau 20, Artisan 300 au niveau 35) ; le curseur ne le dépasse pas, et la raison est écrite sous lui (« 225 max : Artisan au niveau 35 »).
+Le plus haut niveau de métier que le personnage peut débloquer à son niveau (75, puis Compagnon 150 au niveau 10, Expert 225 au niveau 20, Artisan 300 au niveau 35) ; le curseur ne le dépasse pas, et la raison est écrite sous lui (« 225 max : Artisan au niveau 35 »). Atteint en cours de tranche (la compétence au max du métier, sous le curseur) : un avertissement au centre de l'écran et au chat, une fois, car on fabrique dans Composants et chaque fabrication de plus ne donnerait aucun point.
 _Avoid_: patron (sur l'étape)
 
 **Une fois sur dix**:

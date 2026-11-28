@@ -129,14 +129,15 @@ function ns.trancheAbandonner(metier, guid)
 end
 
 -- L'état de la tranche du personnage (GUID, nil = le connecté) : { tranche, rang, a, texte « <métier> <compétence> /
--- <curseur> », le prénom devant pour un autre personnage }, ou nil sans tranche.
+-- <curseur> », le prénom devant pour un autre personnage, plafond (le max du métier quand la compétence l'a atteint sous
+-- le curseur : plus aucun point avant le rang suivant, chez le maître) }, ou nil sans tranche.
 -- Lit la compétence par le socle seulement (celle d'un autre personnage : son dernier relevé) ; au curseur atteint, la
 -- tranche se termine (projet lâché, une ligne au chat) et on rend nil.
 function ns.trancheEtat(metier, guid)
   local t = ns.trancheDe(metier, guid)
   if not t then return nil end
-  local rang
-  for _, m in ipairs(ns.metiers(guid)) do if m.nom == metier then rang = m.rang end end
+  local rang, max
+  for _, m in ipairs(ns.metiers(guid)) do if m.nom == metier then rang, max = m.rang, m.max end end
   if not rang then return nil end -- métier pas relevé : on ne devine rien
   if rang >= t.a then
     ns.trancheAbandonner(metier, guid)
@@ -144,12 +145,25 @@ function ns.trancheEtat(metier, guid)
     return nil
   end
   local qui = ns.prenomAutre(guid)
-  return { tranche = t, rang = rang, a = t.a, texte = ("%s%s %d / %d"):format(qui and (qui .. ", ") or "", metier, rang, t.a) }
+  local plafond = max and rang >= max and max < t.a and max or nil
+  return { tranche = t, rang = rang, a = t.a, plafond = plafond,
+    texte = ("%s%s %d / %d%s"):format(qui and (qui .. ", ") or "", metier, rang, t.a, plafond and " · plafond : va au maître" or "") }
+end
+
+-- Le plafond atteint en cours de tranche (Maîtrise ne voyait que la frise ; on fabrique dans Composants, où rien ne le
+-- disait) : un avertissement au centre de l'écran et au chat, une fois par métier et par plafond dans la session.
+local avertis = {}
+local function avertirPlafond(metier, e)
+  if not (e and e.plafond) or avertis[metier] == e.plafond then return end
+  avertis[metier] = e.plafond
+  local msg = ("Maîtrise : %s plafonné à %d. Apprends le rang suivant chez un maître avant de fabriquer encore : plus aucun point d'ici là."):format(metier, e.plafond)
+  print("|cffff9933" .. msg .. "|r")
+  if RaidNotice_AddMessage and RaidWarningFrame then RaidNotice_AddMessage(RaidWarningFrame, msg, ChatTypeInfo and ChatTypeInfo.RAID_WARNING or { r = 1, g = 0.6, b = 0.2 }) end
 end
 
 -- Le socle relit les métiers sur un gain de compétence et le signale (AzerothCommune#69) : chaque tranche du connecté est
 -- relue aussitôt et se termine au curseur atteint, fenêtre de Maîtrise ouverte ou non.
 function ns.tranchesSuivre()
-  for metier in pairs(db().tranches[UnitGUID("player")] or {}) do ns.trancheEtat(metier) end
+  for metier in pairs(db().tranches[UnitGUID("player")] or {}) do avertirPlafond(metier, ns.trancheEtat(metier)) end
 end
 AzerothCommune:QuandReleve("métiers et compétences", function() ns.tranchesSuivre() end)

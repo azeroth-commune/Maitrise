@@ -429,7 +429,19 @@ local _, p4 = ns.trancheDe("Forge")
 rang(10)
 AzerothCommune:Signaler("métiers et compétences")
 assert(MaitriseDB.tranches[UnitGUID("player")].Forge == nil and p4.tenu == nil, "tranche terminée au signal, sans rien lire d'autre")
-print("Maîtrise : tranche tenue (créer, une par métier, progression, recalcul garde les choix, fin, abandon) OK")
+-- Le plafond atteint sous le curseur (75 sans Compagnon) : l'état le dit, un avertissement au chat, une seule fois.
+assert(ns.trancheCreer("Forge", scenario({ rang = 70, max = 75, curseur = 80, marchands = { [M] = 10 }, recettes = { [1] = { 5001, "Lame", { M, 2 }, 1, 10, 100 } } })))
+assert(ns.trancheEtat("Forge").plafond == nil, "sous le plafond : rien")
+rang(75)
+assert(ns.trancheEtat("Forge").plafond == 75 and ns.trancheEtat("Forge").texte:find("maître", 1, true), ns.trancheEtat("Forge").texte)
+local dits, print0 = {}, print
+print = function(m) dits[#dits + 1] = m end
+ns.tranchesSuivre(); ns.tranchesSuivre()
+print = print0
+assert(#dits == 1 and dits[1]:find("plafonné à 75", 1, true), "averti une fois : " .. #dits)
+ns.trancheAbandonner("Forge")
+AzerothCommuneDB.chars[MOI].professions[1].max = 300
+print("Maîtrise : tranche tenue (créer, une par métier, progression, recalcul garde les choix, fin, abandon, plafond) OK")
 
 -- Un autre de mes personnages (Maitrise#5) : sa tranche part de sa compétence relevée, son curseur est plafonné par son
 -- niveau, elle est tenue à son nom (au plus une par personnage et par métier, à côté de celle du connecté).
