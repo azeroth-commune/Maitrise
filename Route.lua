@@ -117,18 +117,6 @@ function ns.route(rs, achat, revente, FROM, TO)
   for _, r in ipairs(rs) do if r.o then makers[r.o] = makers[r.o] or {}; table.insert(makers[r.o], r) end end
   local allUses = {}
   for _, r in ipairs(rs) do for _, rq in ipairs(r.reag) do allUses[rq.id] = 1 end end
-  -- Le prix pour apprendre une recette (maître ou patron) compte dans le choix point par point, réparti sur les points où
-  -- elle peut servir dans la tranche (chance d'au moins 20 %) : sinon un patron cher pour quelques points passait devant
-  -- une recette sans prix pour une économie de quelques pièces (le total, lui, le comptait déjà une fois).
-  -- ponytail: répartition sur toute la plage utile ; la route peut n'en prendre qu'une partie (le total reste exact).
-  local apprendre = {}
-  for _, r in ipairs(rs) do
-    if (r.pattern or 0) > 0 then
-      local n = 0
-      for s = FROM, TO - 1 do if chance(r, s) >= SEUIL then n = n + 1 end end
-      apprendre[r] = r.pattern / math.max(1, n)
-    end
-  end
   local P, need = {}, {} -- achats et besoins de l'itération précédente
   local marg, memo, sansPrix = {}, {}, {}
   local function marginal(i) -- prix de la prochaine unité, après les P[i] déjà prévues
@@ -167,7 +155,7 @@ function ns.route(rs, achat, revente, FROM, TO)
     if iter == DEPART2 then need, P = allUses, {} end -- 2e départ : tout ce qu'une recette peut consommer sera réemployé
     marg, memo = {}, {}
     -- Coût net espéré d'un point à la compétence s avec la recette r (nil si elle ne donne rien ou qu'un composant n'a pas
-    -- de prix) : (composants − valeur du produit) / chance, plus la part du prix pour l'apprendre.
+    -- de prix) : (composants − valeur du produit) / chance.
     local function coutPoint(r, s)
       local p = chance(r, s)
       if p <= 0 then return nil end
@@ -181,20 +169,40 @@ function ns.route(rs, achat, revente, FROM, TO)
       if r.o then v = ((need[r.o] or 0) > 0 and (unit(r.o, s, 1) or 0) or revente(r.o)) * r.n end
       -- 3e valeur, le net d'une fabrication affiché (Maitrise#12) : composants − revente au marchand du produit, ce qui sort
       -- et rentre vraiment ; le choix, lui, valorise un produit réemployé à son coût de remplacement (v).
-      return (c - v) / p + (apprendre[r] or 0), p, c - (r.o and revente(r.o) * r.n or 0)
+      return (c - v) / p, p, c - (r.o and revente(r.o) * r.n or 0)
     end
-    local steps = {}
+    -- Le choix des recettes : plus court chemin sur (point, recette) (Maitrise#33). Le prix pour apprendre une recette (maître
+    -- ou patron) se paie une fois, au début de son étape, pour les points qu'elle fait vraiment : un patron cher ne sert
+    -- que s'il économise plus qu'il ne coûte sur ses points. (Avant, réparti sur toute sa plage utile, il passait devant
+    -- pour quelques points : Couture 270→280 avec un patron à 40 po.) Un point se fait par une recette à SEUIL de chance au
+    -- moins, à défaut sous ce seuil (mieux la moins mauvaise qu'un trou) ; un point sans recette est un trou.
+    -- ponytail: revenir à une recette déjà quittée repaie son prix dans le chemin (le total exact plus bas le compte une
+    -- fois) ; les retours courts sont repris par la règle de l'aller-retour.
+    local cout, choix, bestC, bestR = {}, {}, 0, nil -- cout[r] : le moins cher jusqu'au point en finissant par r
     for s = FROM, TO - 1 do
-      local best, bk, repli, rk -- repli : le meilleur parmi les recettes sous SEUIL, si aucune autre ne couvre le point
+      local cand, haut = {}, false
       for _, r in ipairs(rs) do
         local k, p, net = coutPoint(r, s)
-        if k then
-          if p < SEUIL then
-            if not rk or k < rk then repli, rk = { r = r, crafts = 1 / p, k = k, net = net }, k end
-          elseif not bk or k < bk then best, bk = { r = r, crafts = 1 / p, k = k, net = net }, k end
+        if k then cand[#cand + 1] = { r = r, crafts = 1 / p, k = k, net = net, p = p }; haut = haut or p >= SEUIL end
+      end
+      local nc, ch, nbC, nbR = {}, {}, nil, nil
+      for _, e in ipairs(cand) do
+        if not haut or e.p >= SEUIL then
+          local r = e.r
+          local depart = bestC + r.pattern
+          local v = cout[r]
+          if v and v <= depart then ch[r] = { e = e } else v = depart; ch[r] = { e = e, de = bestR } end
+          v = v + e.k
+          nc[r] = v
+          if not nbC or v < nbC then nbC, nbR = v, r end
         end
       end
-      steps[s] = best or repli
+      if nbR then cout, choix[s], bestC, bestR = nc, ch, nbC, nbR end -- un trou : le chemin reprend au point suivant
+    end
+    local steps, r = {}, bestR
+    for s = TO - 1, FROM, -1 do
+      local c = choix[s] and choix[s][r]
+      if c then steps[s] = c.e; if c.de then r = c.de end end
     end
     -- Pas d'aller-retour court (Maitrise#17) : une suite de COURT points ou moins sur une recette B, entre deux suites de la
     -- même recette A, passe à A si A y donne encore ses points (chance d'au moins 20 %) et que l'économie de B est

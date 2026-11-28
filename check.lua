@@ -236,6 +236,17 @@ res = scenario({ rang = 1, curseur = 10, marchands = { [M] = 1000, [CLOU] = 100 
 assert(#res.fabrications == 3 and res.fabrications[2].nom == "Clou", "grosse économie : le Clou reste : " .. noms(res))
 print("Maîtrise : pas d'aller-retour court OK")
 
+-- Le prix d'un patron se paie sur les points qu'il fait vraiment (Maitrise#33). « Lame » (20 minerais, gratuite) devient verte
+-- de 26 à 29 : 25 + 33 + 50 + 100 = 208 ; « Robe » (18 minerais) les ferait pour 4 × 18 = 72 plus son patron. À 290, réparti
+-- sur ses 29 points utiles (10 le point), elle passait devant pour 3 points (344 au lieu de 183) : elle ne doit pas servir.
+-- À 100, elle économise sur ses points : elle sert, à la fin.
+local function RR(prix) return { [1] = { 5001, "Lame", { M, 20 }, 1, 25, 30 }, [2] = { 5002, "Robe", { M, 18 }, 1, 40, 50, "patron vendu", prix } } end
+res = scenario({ rang = 1, curseur = 30, marchands = { [M] = 1 }, recettes = RR(290) })
+assert(#res.fabrications == 1 and res.fabrications[1].nom == "Lame" and res.patrons == 0, "patron trop cher pour ses points : " .. noms(res))
+res = scenario({ rang = 1, curseur = 30, marchands = { [M] = 1 }, recettes = RR(100) })
+assert(res.fabrications[#res.fabrications].nom == "Robe" and res.patrons == 100, "patron rentable sur ses points : " .. noms(res))
+print("Maîtrise : prix d'un patron payé sur ses points OK")
+
 -- Plages de couleur et fourchettes (Maitrise#11), seuils du client : orange sous le jaune, vert au milieu jaune/gris.
 -- « Orange » 1-10-20 → 10 orange ; « Longue » (jaune 10, gris 50) : de 10 à 30 jaune, de 30 à 50 vert.
 local function etape(r, nom) for _, f in ipairs(r.fabrications) do if f.nom == nom then return f end end end
